@@ -147,6 +147,42 @@ document.getElementById("open-sheets")?.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
 
+document.getElementById("autofill")?.addEventListener("click", async () => {
+  const btn = document.getElementById("autofill");
+  const status = document.getElementById("status");
+  status.classList.remove("error", "success");
+  btn.disabled = true;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      status.textContent = "No active tab.";
+      status.classList.add("error");
+      return;
+    }
+    const { resumeParsed } = await chrome.storage.local.get(["resumeParsed"]);
+    if (!resumeParsed) {
+      status.textContent = "Parse your resume first (Resume → Parse).";
+      status.classList.add("error");
+      return;
+    }
+    status.textContent = "Filling form…";
+    const res = await chrome.tabs.sendMessage(tab.id, { action: "AUTOFILL_FORM" }).catch((e) => ({
+      ok: false,
+      error: `No auto-fill on this page (${e?.message || "extension not injected here"}). Open an apply form on LinkedIn, Greenhouse, Lever, Workday, Workable, or similar.`,
+    }));
+    if (!res?.ok) {
+      status.textContent = res?.error || "Auto-fill failed.";
+      status.classList.add("error");
+      return;
+    }
+    const missing = (res.missing || []).length;
+    status.textContent = `Filled ${res.filled} field${res.filled === 1 ? "" : "s"}${missing ? ` · ${missing} not found` : ""}`;
+    status.classList.add("success");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 document.getElementById("scan").addEventListener("click", async () => {
   const btn = document.getElementById("scan");
   const status = document.getElementById("status");

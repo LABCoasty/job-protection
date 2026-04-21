@@ -5,9 +5,10 @@ import time
 import uuid
 from datetime import datetime
 
+import io
 import secrets
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_config
@@ -205,6 +206,76 @@ def get_scan(scan_id: str):
     if result is not None:
         return result
     raise HTTPException(status_code=404, detail="Scan not found")
+
+
+def _extract_pdf_text(data: bytes) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        raise HTTPException(500, "PDF support not installed on server")
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        parts = []
+        for page in reader.pages:
+            try:
+                parts.append(page.extract_text() or "")
+            except Exception:
+                continue
+        return "\n\n".join(p for p in parts if p.strip())
+    except Exception as e:
+        raise HTTPException(422, f"Could not read PDF: {e}")
+
+
+def _extract_docx_text(data: bytes) -> str:
+    try:
+        from docx import Document
+    except ImportError:
+        raise HTTPException(500, "DOCX support not installed on server")
+    try:
+        doc = Document(io.BytesIO(data))
+        lines = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
+        # Include text from simple tables (common for resumes).
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    t = (cell.text or "").strip()
+                    if t:
+                        lines.append(t)
+        return "\n".join(lines)
+    except Exception as e:
+        raise HTTPException(422, f"Could not read DOCX: {e}")
+
+
+@app.post("/extract-resume-file", dependencies=[Depends(require_token)])
+async def extract_resume_file(file: UploadFile = File(...)):
+    """Accept a resume file (PDF/DOCX/TXT) and return plain text for editing.
+
+    .doc (legacy Word) is not supported server-side; users should convert to PDF
+    or DOCX before uploading.
+    """
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    name = (file.filename or "").lower()
+    mime = (file.content_type or "").lower()
+    if name.endswith(".pdf") or "pdf" in mime:
+        text = _extract_pdf_text(data)
+    elif name.endswith(".docx") or "wordprocessingml" in mime:
+        text = _extract_docx_text(data)
+    elif name.endswith((".txt", ".md")) or mime.startswith("text/"):
+        try:
+            text = data.decode("utf-8", errors="replace")
+        except Exception:
+            raise HTTPException(422, "Could not decode text file")
+    elif name.endswith(".doc"):
+        raise HTTPException(
+            415,
+            "Legacy .doc files are not supported. Please save as PDF or DOCX and try again.",
+        )
+    else:
+        raise HTTPException(415, f"Unsupported file type: {name or mime or 'unknown'}")
+
+    return {"text": text, "length": len(text)}
 
 
 @app.post("/parse-resume", dependencies=[Depends(require_token)])

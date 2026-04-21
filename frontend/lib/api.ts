@@ -57,6 +57,26 @@ export async function getScan(scanId: string): Promise<ScanResult> {
   return data
 }
 
+export async function uploadResumeFile(file: File): Promise<string> {
+  const fd = new FormData()
+  fd.append("file", file)
+  // Note: don't set Content-Type manually — browser sets it with the multipart boundary.
+  const headers: Record<string, string> = {}
+  const token = _accessToken
+  if (token) headers["X-API-Token"] = token
+  const res = await fetch(`${getBaseUrl()}/extract-resume-file`, {
+    method: "POST",
+    headers,
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Could not read file: ${res.status} ${text}`)
+  }
+  const data = await res.json()
+  return data.text || ""
+}
+
 export async function getHistory(): Promise<ScanHistoryItem[]> {
   const res = await fetch(`${getBaseUrl()}/history`, { headers: authHeaders() })
   if (!res.ok) {

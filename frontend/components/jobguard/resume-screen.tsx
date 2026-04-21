@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { FileText, Upload, Trash2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { uploadResumeFile } from "@/lib/api"
 
 interface ResumeScreenProps {
   onBack: () => void
@@ -52,10 +53,23 @@ export function ResumeScreen({ onBack }: ResumeScreenProps) {
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     if (!f) return
+    const name = f.name.toLowerCase()
+    const isText = name.endsWith(".txt") || name.endsWith(".md") || f.type.startsWith("text/")
+    setStatus(`Reading ${f.name}…`)
     try {
-      const content = await f.text()
+      let content = ""
+      if (isText) {
+        content = await f.text()
+      } else {
+        // PDF, DOCX: send to backend for text extraction.
+        content = await uploadResumeFile(f)
+      }
+      if (!content.trim()) {
+        setStatus(`Extracted 0 characters from ${f.name}. Try a different file.`)
+        return
+      }
       setText(content)
-      setStatus(`Loaded ${f.name} — click Save to store`)
+      setStatus(`Loaded ${f.name} (${content.length.toLocaleString()} chars) — click Save to store`)
     } catch (err) {
       setStatus(`Could not read file: ${(err as Error).message}`)
     }
@@ -130,12 +144,12 @@ export function ResumeScreen({ onBack }: ResumeScreenProps) {
               className="gap-2"
             >
               <Upload className="w-4 h-4" />
-              Upload .txt
+              Upload PDF / DOCX / TXT
             </Button>
             <input
               ref={fileRef}
               type="file"
-              accept=".txt,.md,text/plain"
+              accept=".txt,.md,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={handleFile}
               className="hidden"
             />
