@@ -1,6 +1,6 @@
 "use client"
 
-import { Shield, History, FileSpreadsheet, Info } from "lucide-react"
+import { Shield, History, FileSpreadsheet, FileText, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { Screen } from "@/lib/jobguard-types"
 
@@ -33,6 +33,15 @@ export function Header({ currentScreen, onNavigate }: HeaderProps) {
               aria-label="Scan History"
             >
               <History className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={currentScreen === "resume" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => onNavigate("resume")}
+              aria-label="Your resume"
+            >
+              <FileText className="h-4 w-4" />
             </Button>
             <Button
               variant={currentScreen === "export" ? "secondary" : "ghost"}

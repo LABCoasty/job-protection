@@ -207,6 +207,18 @@ def get_scan(scan_id: str):
     raise HTTPException(status_code=404, detail="Scan not found")
 
 
+@app.post("/parse-resume", dependencies=[Depends(require_token)])
+def parse_resume(body: dict):
+    """Structure a resume text into name/skills/companies/etc. via the LLM."""
+    text = (body.get("text") or "").strip() if isinstance(body, dict) else ""
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing 'text' field")
+    parsed = ollama_service.parse_resume(text)
+    if parsed is None:
+        raise HTTPException(status_code=502, detail="Could not parse resume")
+    return {"parsed": parsed}
+
+
 @app.get("/history", response_model=list[ScanHistoryItem], dependencies=[Depends(require_token)])
 def history(limit: int = 50):
     """Return recent scan history (from DB if configured, else empty)."""

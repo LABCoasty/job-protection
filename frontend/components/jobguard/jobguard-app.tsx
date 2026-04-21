@@ -7,6 +7,7 @@ import { ScanningScreen } from "./scanning-screen"
 import { ResultsScreen } from "./results-screen"
 import { HistoryScreen } from "./history-screen"
 import { ExportScreen } from "./export-screen"
+import { ResumeScreen } from "./resume-screen"
 import { AboutScreen } from "./about-screen"
 import type { Screen, ScanResult, ScanHistoryItem } from "@/lib/jobguard-types"
 import type { ScanRequestPayload } from "@/lib/api"
@@ -135,6 +136,10 @@ export function JobGuardApp() {
         
         {currentScreen === "export" && (
           <ExportScreen onBack={handleBack} />
+        )}
+
+        {currentScreen === "resume" && (
+          <ResumeScreen onBack={handleBack} />
         )}
         
         {currentScreen === "about" && (

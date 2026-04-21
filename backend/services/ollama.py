@@ -188,6 +188,58 @@ def _normalize(parsed: dict) -> dict:
     }
 
 
+def parse_resume(resume_text: str) -> dict | None:
+    """Structure a resume text into name/email/skills/etc. using the LLM."""
+    if not resume_text or len(resume_text) < 50:
+        return None
+    prompt = (
+        "Parse this resume into structured JSON. Output ONLY valid JSON, no markdown.\n\n"
+        "Schema:\n"
+        '{\n'
+        '  "name": "<full name or empty>",\n'
+        '  "email": "<primary email or empty>",\n'
+        '  "phone": "<phone or empty>",\n'
+        '  "location": "<city/region or empty>",\n'
+        '  "currentTitle": "<most recent job title or empty>",\n'
+        '  "yearsOfExperience": "<approximate total years, e.g. \'5+\', or empty>",\n'
+        '  "skills": ["<concrete technical or professional skills, deduped>"],\n'
+        '  "topCompanies": ["<most recent 2-5 employers>"],\n'
+        '  "education": ["<degree + institution lines, most recent first>"],\n'
+        '  "summary": "<one-sentence professional summary>"\n'
+        "}\n\n"
+        "Resume text:\n"
+        + resume_text[:12000]
+    )
+    config = get_config()
+    if config.get("groq_api_key"):
+        raw = _call_groq(prompt, config["groq_api_key"], config["groq_model"])
+    else:
+        raw = _call_ollama(prompt, config["ollama_url"], config["ollama_model"])
+    if not raw:
+        return None
+    parsed = _parse_json(raw)
+    if not isinstance(parsed, dict):
+        return None
+
+    def _strs(v):
+        if not isinstance(v, list):
+            return []
+        return [str(x).strip() for x in v if isinstance(x, (str, int, float)) and str(x).strip()]
+
+    return {
+        "name": (parsed.get("name") or "").strip(),
+        "email": (parsed.get("email") or "").strip(),
+        "phone": (parsed.get("phone") or "").strip(),
+        "location": (parsed.get("location") or "").strip(),
+        "currentTitle": (parsed.get("currentTitle") or "").strip(),
+        "yearsOfExperience": (parsed.get("yearsOfExperience") or "").strip(),
+        "skills": _strs(parsed.get("skills"))[:40],
+        "topCompanies": _strs(parsed.get("topCompanies"))[:10],
+        "education": _strs(parsed.get("education"))[:10],
+        "summary": (parsed.get("summary") or "").strip(),
+    }
+
+
 def preextract_fields(description: str) -> dict | None:
     """Fast LLM call to pull job title / company / location from raw description.
 

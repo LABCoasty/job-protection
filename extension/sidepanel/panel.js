@@ -29,6 +29,41 @@ async function pushGoogleStatus() {
   );
 }
 
+async function pushResumeData() {
+  const iframe = document.getElementById("report-frame");
+  if (!iframe?.contentWindow) return;
+  const { resumeText, resumeUpdatedAt, resumeParsed } = await chrome.storage.local.get([
+    "resumeText",
+    "resumeUpdatedAt",
+    "resumeParsed",
+  ]);
+  iframe.contentWindow.postMessage(
+    {
+      type: "JOBGUARD_RESUME_DATA",
+      text: resumeText || "",
+      length: resumeText ? resumeText.length : 0,
+      updatedAt: resumeUpdatedAt || null,
+      parsed: resumeParsed || null,
+    },
+    "*"
+  );
+}
+
+async function parseResumeOnBackend(text) {
+  const { backendUrl, apiToken } = await chrome.storage.sync.get(["backendUrl", "apiToken"]);
+  const backend = backendUrl || "http://localhost:8000";
+  const headers = { "Content-Type": "application/json" };
+  if (apiToken) headers["X-API-Token"] = apiToken;
+  const res = await fetch(`${backend}/parse-resume`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`parse-resume failed: ${res.status}`);
+  const data = await res.json();
+  return data.parsed || null;
+}
+
 window.addEventListener("message", async (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
@@ -36,16 +71,50 @@ window.addEventListener("message", async (event) => {
     if (data.type === "JOBGUARD_GET_GOOGLE_STATUS") {
       await pushGoogleStatus();
     } else if (data.type === "JOBGUARD_CONNECT_GOOGLE") {
-      // chrome.identity.getAuthToken({ interactive: true }) requires a user
-      // gesture and a top-level window. Route through the Options page where
-      // the existing working Connect button handles the OAuth flow directly.
-      chrome.runtime.openOptionsPage();
+      // Try interactive OAuth directly from this (top-level extension) context.
+      // If Chrome refuses due to user-gesture rules, fall back to Options page.
+      try {
+        await connect();
+        await pushGoogleStatus();
+      } catch (err) {
+        console.warn("Direct connect failed, opening options page:", err);
+        chrome.runtime.openOptionsPage();
+      }
     } else if (data.type === "JOBGUARD_DISCONNECT_GOOGLE") {
       await disconnect();
       await pushGoogleStatus();
     } else if (data.type === "JOBGUARD_SET_AUTOLOG") {
       await setAutoLog(Boolean(data.value));
       await pushGoogleStatus();
+    } else if (data.type === "JOBGUARD_GET_RESUME") {
+      await pushResumeData();
+    } else if (data.type === "JOBGUARD_SAVE_RESUME") {
+      const text = (data.text || "").toString().slice(0, 40000);
+      await chrome.storage.local.set({
+        resumeText: text,
+        resumeUpdatedAt: new Date().toISOString(),
+      });
+      await pushResumeData();
+    } else if (data.type === "JOBGUARD_CLEAR_RESUME") {
+      await chrome.storage.local.remove(["resumeText", "resumeUpdatedAt", "resumeParsed"]);
+      await pushResumeData();
+    } else if (data.type === "JOBGUARD_PARSE_RESUME") {
+      const text = (data.text || "").toString();
+      let parsed = null;
+      try {
+        parsed = await parseResumeOnBackend(text);
+      } catch (e) {
+        console.warn("parse-resume error:", e);
+      }
+      if (parsed) {
+        await chrome.storage.local.set({ resumeParsed: parsed });
+      }
+      const iframe = document.getElementById("report-frame");
+      iframe?.contentWindow?.postMessage(
+        { type: "JOBGUARD_RESUME_PARSED", parsed },
+        "*"
+      );
+      await pushResumeData();
     }
   } catch (e) {
     console.warn("JobGuard bridge error:", e);
@@ -54,9 +123,11 @@ window.addEventListener("message", async (event) => {
 
 // Keep the iframe's status in sync when the user returns from the Options page.
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "sync") return;
-  if ("spreadsheetId" in changes || "autoLog" in changes) {
+  if (area === "sync" && ("spreadsheetId" in changes || "autoLog" in changes)) {
     pushGoogleStatus();
+  }
+  if (area === "local" && ("resumeText" in changes || "resumeParsed" in changes || "resumeUpdatedAt" in changes)) {
+    pushResumeData();
   }
 });
 

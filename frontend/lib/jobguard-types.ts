@@ -63,4 +63,4 @@ export interface ScanHistoryItem {
   platform: string
 }
 
-export type Screen = "home" | "scanning" | "results" | "history" | "export" | "about"
+export type Screen = "home" | "scanning" | "results" | "history" | "export" | "resume" | "about"
