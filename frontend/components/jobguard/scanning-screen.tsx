@@ -18,6 +18,8 @@ interface ScanningScreenProps {
   awaitingExtension?: boolean
   // Error bubbled up from the parent (SCAN_ERROR); renders instead of the steps.
   externalError?: string | null
+  // Called when the user clicks "Try again" from the error state.
+  onRetry?: () => void
 }
 
 const scanSteps = [
@@ -33,6 +35,7 @@ export function ScanningScreen({
   onBack,
   awaitingExtension = false,
   externalError = null,
+  onRetry,
 }: ScanningScreenProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -83,8 +86,8 @@ export function ScanningScreen({
 
   if (showUseExtension) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-8">
-        <div className="w-full max-w-sm space-y-6 text-center">
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-6">
+        <div className="w-full max-w-md space-y-6 text-center">
           <p className="text-sm text-muted-foreground">
             To scan a job listing, use the JobGuard Chrome extension on a LinkedIn or Indeed job page.
           </p>
@@ -98,20 +101,29 @@ export function ScanningScreen({
 
   if (displayError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-8">
-        <div className="w-full max-w-sm space-y-6 text-center">
-          <p className="text-sm text-destructive">{displayError}</p>
-          <Button variant="outline" onClick={onBack}>
-            Back to home
-          </Button>
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-6">
+        <div className="w-full max-w-md space-y-6 text-center">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+            <span className="text-destructive text-2xl leading-none">!</span>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Something went wrong</h2>
+            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{displayError}</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {onRetry && <Button onClick={onRetry}>Try again</Button>}
+            <Button variant="outline" onClick={onBack}>
+              Back to home
+            </Button>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-8">
-      <div className="w-full max-w-sm space-y-8 text-center">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-6">
+      <div className="w-full max-w-md space-y-6 text-center">
         {/* Spinner */}
         <div className="relative w-24 h-24 mx-auto">
           <div className="absolute inset-0 rounded-full border-4 border-border" />

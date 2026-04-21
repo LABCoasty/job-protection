@@ -12,8 +12,8 @@ interface HomeScreenProps {
 
 export function HomeScreen({ onScan, onAutofill, detectedPlatform }: HomeScreenProps) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-8">
-      <div className="w-full max-w-sm space-y-8 text-center">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-6">
+      <div className="w-full max-w-md space-y-8 text-center">
         {/* Hero */}
         <div className="space-y-4">
           <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
@@ -28,20 +28,27 @@ export function HomeScreen({ onScan, onAutofill, detectedPlatform }: HomeScreenP
         </div>
 
         {/* Platform Detection */}
-        {detectedPlatform && (
-          <div className="flex items-center justify-center gap-2">
-            <span className="text-xs text-muted-foreground">Detected:</span>
-            <Badge variant="secondary" className="text-xs font-medium">
-              {detectedPlatform}
-            </Badge>
-          </div>
-        )}
+        <div className="flex items-center justify-center gap-2 min-h-[24px]">
+          {detectedPlatform ? (
+            <>
+              <span className="text-xs text-muted-foreground">Detected:</span>
+              <Badge variant="secondary" className="text-xs font-medium">
+                {detectedPlatform}
+              </Badge>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              Open a LinkedIn or Indeed job posting to scan.
+            </span>
+          )}
+        </div>
 
         {/* Scan Button */}
         <Button
           size="lg"
           className="w-full h-14 text-base font-semibold gap-3"
           onClick={onScan}
+          disabled={!detectedPlatform || (detectedPlatform !== "LinkedIn" && detectedPlatform !== "Indeed")}
         >
           <Scan className="w-5 h-5" />
           Scan this listing

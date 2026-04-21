@@ -1,7 +1,6 @@
 "use client"
 
-import { Shield, AlertTriangle, Lock, Eye, FlaskConical, ExternalLink } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Shield, AlertTriangle, Lock, Eye, FlaskConical, Github } from "lucide-react"
 
 interface AboutScreenProps {
   onBack: () => void
@@ -106,21 +105,19 @@ export function AboutScreen({ onBack }: AboutScreenProps) {
           </ul>
         </div>
 
-        {/* Links */}
-        <div className="flex flex-col gap-2">
-          <Button variant="outline" className="justify-between bg-transparent">
-            Privacy Policy
-            <ExternalLink className="w-4 h-4" />
-          </Button>
-          <Button variant="outline" className="justify-between bg-transparent">
-            Terms of Service
-            <ExternalLink className="w-4 h-4" />
-          </Button>
-          <Button variant="outline" className="justify-between bg-transparent">
-            Contact Support
-            <ExternalLink className="w-4 h-4" />
-          </Button>
-        </div>
+        {/* Source */}
+        <a
+          href="https://github.com/LABCoasty/job-protection"
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center justify-between p-3 rounded-xl bg-card border border-border hover:border-primary/60 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-sm text-foreground">
+            <Github className="w-4 h-4" />
+            Open source on GitHub
+          </div>
+          <span className="text-xs text-muted-foreground">LABCoasty/job-protection</span>
+        </a>
 
         {/* Footer */}
         <p className="text-xs text-center text-muted-foreground/70 pt-4">

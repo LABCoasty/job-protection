@@ -4,47 +4,68 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.13 0.01 250);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.17 0.01 250);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.17 0.01 250);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.75 0.15 175);
-  --primary-foreground: oklch(0.13 0.01 250);
-  --secondary: oklch(0.22 0.01 250);
-  --secondary-foreground: oklch(0.85 0 0);
-  --muted: oklch(0.22 0.01 250);
-  --muted-foreground: oklch(0.6 0.02 220);
-  --accent: oklch(0.75 0.15 175);
-  --accent-foreground: oklch(0.13 0.01 250);
-  --destructive: oklch(0.6 0.2 25);
-  --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.28 0.01 250);
-  --input: oklch(0.22 0.01 250);
-  --ring: oklch(0.75 0.15 175);
-  --chart-1: oklch(0.75 0.15 175);
-  --chart-2: oklch(0.8 0.18 85);
-  --chart-3: oklch(0.6 0.2 25);
-  --chart-4: oklch(0.65 0.15 220);
-  --chart-5: oklch(0.7 0.1 300);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.15 0.01 250);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.75 0.15 175);
-  --sidebar-primary-foreground: oklch(0.13 0.01 250);
-  --sidebar-accent: oklch(0.22 0.01 250);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.28 0.01 250);
-  --sidebar-ring: oklch(0.75 0.15 175);
-  
-  /* JobGuard specific colors */
-  --success: oklch(0.7 0.18 145);
-  --success-foreground: oklch(0.95 0 0);
-  --warning: oklch(0.8 0.18 85);
-  --warning-foreground: oklch(0.15 0.01 250);
-  --danger: oklch(0.6 0.2 25);
-  --danger-foreground: oklch(0.95 0 0);
+  /* ---------- Claude-inspired warm dark palette ---------- */
+  /* Surfaces: layered neutrals with a touch of warmth (hue 50 = warm brown). */
+  --surface-0: oklch(0.14 0.012 50);   /* page */
+  --surface-1: oklch(0.18 0.013 50);   /* card */
+  --surface-2: oklch(0.22 0.014 50);   /* elevated card */
+  --surface-3: oklch(0.26 0.014 50);   /* hover / active */
+  --hairline: oklch(0.30 0.012 50);    /* subtle borders */
+
+  /* Text: three strength levels, never pure white. */
+  --text-strong: oklch(0.97 0.005 80);
+  --text-default: oklch(0.88 0.008 80);
+  --text-subtle: oklch(0.65 0.012 65);
+
+  /* Accents: warm amber primary (Claude-ish), sage for good, coral for bad. */
+  --accent-gold: oklch(0.80 0.135 75);      /* warm amber — primary */
+  --accent-gold-ink: oklch(0.20 0.015 55);  /* text on amber */
+  --accent-sage: oklch(0.74 0.090 155);     /* good signals, low-risk */
+  --accent-coral: oklch(0.68 0.180 25);     /* bad signals, high-risk */
+  --accent-butter: oklch(0.85 0.120 90);    /* warn signals */
+
+  /* ---------- shadcn compatibility (map tokens → old names) ---------- */
+  --background: var(--surface-0);
+  --foreground: var(--text-default);
+  --card: var(--surface-1);
+  --card-foreground: var(--text-default);
+  --popover: var(--surface-2);
+  --popover-foreground: var(--text-default);
+  --primary: var(--accent-gold);
+  --primary-foreground: var(--accent-gold-ink);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text-default);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-subtle);
+  --accent: var(--accent-gold);
+  --accent-foreground: var(--accent-gold-ink);
+  --destructive: var(--accent-coral);
+  --destructive-foreground: var(--text-strong);
+  --border: var(--hairline);
+  --input: var(--surface-2);
+  --ring: var(--accent-gold);
+  --chart-1: var(--accent-gold);
+  --chart-2: var(--accent-butter);
+  --chart-3: var(--accent-coral);
+  --chart-4: var(--accent-sage);
+  --chart-5: oklch(0.70 0.10 300);
+  --radius: 0.625rem;
+  --sidebar: var(--surface-1);
+  --sidebar-foreground: var(--text-default);
+  --sidebar-primary: var(--accent-gold);
+  --sidebar-primary-foreground: var(--accent-gold-ink);
+  --sidebar-accent: var(--surface-2);
+  --sidebar-accent-foreground: var(--text-default);
+  --sidebar-border: var(--hairline);
+  --sidebar-ring: var(--accent-gold);
+
+  /* Semantic signal colors (used throughout the Results UI). */
+  --success: var(--accent-sage);
+  --success-foreground: var(--accent-gold-ink);
+  --warning: var(--accent-butter);
+  --warning-foreground: var(--accent-gold-ink);
+  --danger: var(--accent-coral);
+  --danger-foreground: var(--text-strong);
 }
 
 @theme inline {

@@ -27,6 +27,38 @@ function post(type, payload = {}) {
   frameWindow()?.postMessage({ type, ...payload }, "*");
 }
 
+// --- Active-tab platform detection ----------------------------------------
+
+function detectPlatformFromUrl(url) {
+  if (!url) return null;
+  if (url.includes("linkedin.com")) return "LinkedIn";
+  if (url.includes("indeed.com")) return "Indeed";
+  if (url.includes("greenhouse.io")) return "Greenhouse";
+  if (url.includes("lever.co")) return "Lever";
+  if (url.includes("myworkdayjobs.com")) return "Workday";
+  if (url.includes("workable.com")) return "Workable";
+  if (url.includes("ashbyhq.com")) return "Ashby";
+  if (url.includes("smartrecruiters.com")) return "SmartRecruiters";
+  if (url.includes("bamboohr.com")) return "BambooHR";
+  if (url.includes("icims.com")) return "iCIMS";
+  return null;
+}
+
+async function pushPlatform() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const platform = detectPlatformFromUrl(tab?.url);
+    post("JOBGUARD_PLATFORM", { platform, url: tab?.url || "" });
+  } catch {
+    post("JOBGUARD_PLATFORM", { platform: null, url: "" });
+  }
+}
+
+chrome.tabs.onActivated.addListener(() => pushPlatform());
+chrome.tabs.onUpdated.addListener((_tabId, info) => {
+  if (info.url || info.status === "complete") pushPlatform();
+});
+
 // --- Extraction + scan orchestration --------------------------------------
 
 const hasContent = (p) =>
@@ -178,6 +210,26 @@ window.addEventListener("message", async (event) => {
       case "AUTOFILL_REQUEST":
         runAutofill(data.requestId || null);
         break;
+      case "JOBGUARD_GET_PLATFORM":
+        await pushPlatform();
+        break;
+      case "JOBGUARD_OPEN_SETTINGS":
+        chrome.runtime.openOptionsPage();
+        break;
+      case "JOBGUARD_GET_ONBOARDING_STATUS": {
+        const { resumeText, onboardingDismissedAt } = await chrome.storage.local.get([
+          "resumeText",
+          "onboardingDismissedAt",
+        ]);
+        post("JOBGUARD_ONBOARDING_STATUS", {
+          hasResume: Boolean(resumeText && resumeText.length > 100),
+          dismissed: Boolean(onboardingDismissedAt),
+        });
+        break;
+      }
+      case "JOBGUARD_DISMISS_ONBOARDING":
+        await chrome.storage.local.set({ onboardingDismissedAt: new Date().toISOString() });
+        break;
       case "JOBGUARD_GET_GOOGLE_STATUS":
         await pushGoogleStatus();
         break;
@@ -197,6 +249,15 @@ window.addEventListener("message", async (event) => {
       case "JOBGUARD_SET_AUTOLOG":
         await setAutoLog(Boolean(data.value));
         await pushGoogleStatus();
+        break;
+      case "JOBGUARD_EXPORT_NOW":
+        try {
+          if (!data.result) throw new Error("No scan result to export.");
+          await appendScan(data.result);
+          post("JOBGUARD_EXPORT_RESULT", { ok: true });
+        } catch (e) {
+          post("JOBGUARD_EXPORT_RESULT", { ok: false, error: String(e.message || e) });
+        }
         break;
       case "JOBGUARD_GET_RESUME":
         await pushResumeData();

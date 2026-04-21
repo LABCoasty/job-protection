@@ -1,15 +1,13 @@
 "use client"
 
+import { useState } from "react"
 import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
   Copy,
-  Download,
   FileSpreadsheet,
-  Flag,
   ChevronRight,
-  ExternalLink,
   Briefcase,
   Building2,
   MapPin,
@@ -22,11 +20,10 @@ import {
   Mail,
   User,
   Globe,
-  Link2,
   FileCheck,
-  Linkedin,
   Search,
   Shield,
+  Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -88,8 +85,42 @@ const nextSteps = [
   { icon: Building2, text: "Search company on registry/directories" },
 ]
 
+// Strip the extension's "Unknown (extract from description)" hint, which
+// should never reach end users — it's only a signal to the LLM.
+function cleanUnknown(value: string | undefined | null): string {
+  if (!value) return ""
+  const v = value.trim()
+  if (/^unknown\s*\(extract/i.test(v)) return ""
+  if (v === "Unknown title" || v === "Unknown company") return ""
+  return v
+}
+
 export function ResultsScreen({ result, onExport, onBack }: ResultsScreenProps) {
   const { trustScore, riskLevel, primaryWarning, snapshot, jobPostSignals, companySignals, resumeMatch } = result
+  const displayTitle = cleanUnknown(snapshot.jobTitle) || "Untitled listing"
+  const displayCompany = cleanUnknown(snapshot.companyName) || "Unnamed company"
+  const [copied, setCopied] = useState(false)
+
+  async function copyToClipboard() {
+    const payload = {
+      trustScore,
+      riskLevel,
+      primaryWarning,
+      jobTitle: snapshot.jobTitle,
+      companyName: snapshot.companyName,
+      url: snapshot.pageUrl,
+      jobPostSignals: jobPostSignals.map((s) => ({ status: s.status, label: s.label, evidence: s.evidence })),
+      companySignals: companySignals.map((s) => ({ status: s.status, label: s.label, evidence: s.evidence })),
+      resumeMatch: resumeMatch && resumeMatch.score > 0 ? resumeMatch : undefined,
+    }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      // Clipboard blocked in some extension contexts; fail quietly.
+    }
+  }
 
   const jobSignalCounts = {
     good: jobPostSignals.filter((s) => s.status === "good").length,
@@ -164,8 +195,8 @@ export function ResultsScreen({ result, onExport, onBack }: ResultsScreenProps) 
           </h3>
           <div className="p-4 rounded-xl bg-card border border-border space-y-3">
             <div>
-              <h4 className="font-semibold text-foreground">{snapshot.jobTitle}</h4>
-              <p className="text-sm text-muted-foreground">{snapshot.companyName}</p>
+              <h4 className="font-semibold text-foreground">{displayTitle}</h4>
+              <p className="text-sm text-muted-foreground">{displayCompany}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="flex items-center gap-2 text-muted-foreground">
@@ -368,23 +399,15 @@ export function ResultsScreen({ result, onExport, onBack }: ResultsScreenProps) 
       </div>
 
       {/* Fixed Bottom Actions */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border p-4">
-        <div className="max-w-md mx-auto grid grid-cols-4 gap-2">
-          <Button variant="outline" size="sm" className="flex-col h-auto py-2 gap-1 bg-transparent">
-            <Download className="w-4 h-4" />
-            <span className="text-xs">Save</span>
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border px-4 py-3">
+        <div className="max-w-md mx-auto grid grid-cols-2 gap-2">
+          <Button variant="outline" size="sm" onClick={copyToClipboard} className="gap-2">
+            {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+            {copied ? "Copied" : "Copy JSON"}
           </Button>
-          <Button variant="outline" size="sm" className="flex-col h-auto py-2 gap-1 bg-transparent" onClick={onExport}>
+          <Button size="sm" onClick={onExport} className="gap-2">
             <FileSpreadsheet className="w-4 h-4" />
-            <span className="text-xs">Export</span>
-          </Button>
-          <Button variant="outline" size="sm" className="flex-col h-auto py-2 gap-1 bg-transparent">
-            <Copy className="w-4 h-4" />
-            <span className="text-xs">Copy</span>
-          </Button>
-          <Button variant="outline" size="sm" className="flex-col h-auto py-2 gap-1 text-danger hover:text-danger bg-transparent">
-            <Flag className="w-4 h-4" />
-            <span className="text-xs">Flag</span>
+            Export
           </Button>
         </div>
       </div>

@@ -184,38 +184,88 @@ export function ResumeScreen({ onBack }: ResumeScreenProps) {
           {status && <div className="text-xs text-primary">{status}</div>}
         </div>
 
-        {parsed && (
-          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-            <p className="text-sm font-semibold text-foreground">Parsed profile</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-              {parsed.name && (<><div className="text-muted-foreground">Name</div><div className="text-foreground">{parsed.name}</div></>)}
-              {parsed.email && (<><div className="text-muted-foreground">Email</div><div className="text-foreground break-all">{parsed.email}</div></>)}
-              {parsed.phone && (<><div className="text-muted-foreground">Phone</div><div className="text-foreground">{parsed.phone}</div></>)}
-              {parsed.currentTitle && (<><div className="text-muted-foreground">Current title</div><div className="text-foreground">{parsed.currentTitle}</div></>)}
-              {parsed.yearsOfExperience && (<><div className="text-muted-foreground">Experience</div><div className="text-foreground">{parsed.yearsOfExperience}</div></>)}
+        {parsed && (() => {
+          const fields: { key: keyof NonNullable<typeof parsed>; label: string }[] = [
+            { key: "name", label: "Name" },
+            { key: "email", label: "Email" },
+            { key: "phone", label: "Phone" },
+            { key: "currentTitle", label: "Current title" },
+            { key: "yearsOfExperience", label: "Experience" },
+          ]
+          const filled = fields.filter((f) => {
+            const v = parsed[f.key]
+            return typeof v === "string" && v.trim().length > 0
+          }).length
+          const hasSkills = parsed.skills && parsed.skills.length > 0
+          const hasCompanies = parsed.topCompanies && parsed.topCompanies.length > 0
+          const total = fields.length + 2 // + skills + companies
+          const covered = filled + (hasSkills ? 1 : 0) + (hasCompanies ? 1 : 0)
+          const pct = Math.round((covered / total) * 100)
+          const barColor = pct >= 75 ? "bg-success" : pct >= 50 ? "bg-warning" : "bg-danger"
+          return (
+            <div className="p-4 rounded-xl bg-card border border-border space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">Parsed profile</p>
+                  <span className="text-xs text-muted-foreground tabular-nums">{pct}% complete</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full ${barColor} transition-all duration-500`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+
+              <dl className="divide-y divide-border/60 text-xs">
+                {fields.map((f) => (
+                  <div key={f.key} className="grid grid-cols-[100px_1fr] gap-3 py-2">
+                    <dt className="text-muted-foreground">{f.label}</dt>
+                    <dd className="text-foreground break-words">
+                      {typeof parsed[f.key] === "string" && (parsed[f.key] as string).trim() ? (
+                        (parsed[f.key] as string)
+                      ) : (
+                        <span className="text-muted-foreground/60">—</span>
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+
+              {hasSkills && (
+                <div className="space-y-1.5">
+                  <div className="text-xs text-muted-foreground">Skills</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {parsed.skills!.slice(0, 24).map((s, i) => (
+                      <span
+                        key={i}
+                        className="text-[11px] px-2 py-0.5 rounded bg-secondary text-secondary-foreground"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {hasCompanies && (
+                <div className="space-y-1.5">
+                  <div className="text-xs text-muted-foreground">Recent companies</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {parsed.topCompanies!.slice(0, 6).map((c, i) => (
+                      <span
+                        key={i}
+                        className="text-[11px] px-2 py-0.5 rounded bg-secondary text-secondary-foreground"
+                      >
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            {parsed.skills && parsed.skills.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-xs text-muted-foreground">Skills</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {parsed.skills.slice(0, 24).map((s, i) => (
-                    <span key={i} className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">{s}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {parsed.topCompanies && parsed.topCompanies.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-xs text-muted-foreground">Recent companies</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {parsed.topCompanies.slice(0, 6).map((c, i) => (
-                    <span key={i} className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">{c}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )

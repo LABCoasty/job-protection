@@ -10,6 +10,7 @@ interface HistoryScreenProps {
   history: ScanHistoryItem[]
   onSelectScan: (id: string) => void
   onBack: () => void
+  loading?: boolean
 }
 
 function getRiskBadgeStyle(level: RiskLevel) {
@@ -47,7 +48,7 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString()
 }
 
-export function HistoryScreen({ history, onSelectScan, onBack }: HistoryScreenProps) {
+export function HistoryScreen({ history, onSelectScan, onBack, loading = false }: HistoryScreenProps) {
   return (
     <div className="min-h-[calc(100vh-60px)]">
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
@@ -70,7 +71,29 @@ export function HistoryScreen({ history, onSelectScan, onBack }: HistoryScreenPr
         </div>
 
         {/* History List */}
-        {history.length === 0 ? (
+        {loading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-full p-4 rounded-xl bg-card border border-border flex items-center gap-3 animate-pulse"
+              >
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-3/4 bg-muted rounded" />
+                  <div className="h-3 w-1/2 bg-muted rounded" />
+                  <div className="flex gap-2">
+                    <div className="h-4 w-14 bg-muted rounded-full" />
+                    <div className="h-3 w-20 bg-muted rounded" />
+                  </div>
+                </div>
+                <div className="shrink-0 flex flex-col items-end gap-1">
+                  <div className="h-7 w-10 bg-muted rounded" />
+                  <div className="h-4 w-12 bg-muted rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : history.length === 0 ? (
           <div className="text-center py-12 space-y-3">
             <div className="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mx-auto">
               <Clock className="w-8 h-8 text-muted-foreground" />
