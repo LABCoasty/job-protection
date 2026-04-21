@@ -69,6 +69,12 @@ document.getElementById("scan-another").addEventListener("click", showScan);
 document.getElementById("open-options").addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
+document.getElementById("open-resume")?.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+});
+document.getElementById("open-sheets")?.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+});
 
 document.getElementById("scan").addEventListener("click", async () => {
   const btn = document.getElementById("scan");

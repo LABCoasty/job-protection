@@ -103,8 +103,8 @@
 </head>
 <body>
   <div class="container">
-    <h1>JobGuard settings</h1>
-    <p class="subtitle">Research project. Local-first. Your data stays with you.</p>
+    <h1>JobGuard</h1>
+    <p class="subtitle">Manage your resume and Google Sheets export. Your data stays local unless you explicitly connect to Google.</p>
 
     <div class="section">
       <h2>Google Sheets export</h2>
@@ -131,39 +131,6 @@
     </div>
 
     <div class="section">
-      <h2>Backend URL</h2>
-      <div class="row">
-        <div style="flex: 1;">
-          <input id="backend-url" type="url" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="http://localhost:8000">
-          <div class="muted" style="margin-top: 6px;">Where the JobGuard FastAPI backend is running.</div>
-        </div>
-        <button id="btn-save-backend" class="btn btn-outline">Save</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Frontend URL</h2>
-      <div class="row">
-        <div style="flex: 1;">
-          <input id="frontend-url" type="url" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="http://localhost:3000">
-          <div class="muted" style="margin-top: 6px;">Where the JobGuard report UI is hosted (shown in the side panel after a scan).</div>
-        </div>
-        <button id="btn-save-frontend" class="btn btn-outline">Save</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Access token</h2>
-      <div class="row">
-        <div style="flex: 1;">
-          <input id="api-token" type="password" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="Paste your API_TOKEN from Render">
-          <div class="muted" style="margin-top: 6px;">Shared secret that gates the backend + report UI. Leave blank to skip auth (local dev only).</div>
-        </div>
-        <button id="btn-save-token" class="btn btn-outline">Save</button>
-      </div>
-    </div>
-
-    <div class="section">
       <h2>Your resume</h2>
       <p class="muted" style="margin: 0 0 12px 0;">Upload a plain-text resume or paste its contents. JobGuard sends it with every scan so the AI can tell you how well the job matches your background.</p>
       <div class="row" style="align-items: flex-start;">
@@ -178,6 +145,36 @@
         </div>
       </div>
     </div>
+
+    <details class="section" style="cursor: pointer;">
+      <summary style="font-size: 15px; font-weight: 600; color: var(--muted-foreground); list-style: none;">Developer settings (advanced)</summary>
+      <div style="margin-top: 16px;">
+        <div class="row">
+          <div style="flex: 1;">
+            <div style="font-weight: 500; margin-bottom: 4px;">Backend URL</div>
+            <input id="backend-url" type="url" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="http://localhost:8000">
+            <div class="muted" style="margin-top: 6px;">Where the JobGuard FastAPI backend is running.</div>
+          </div>
+          <button id="btn-save-backend" class="btn btn-outline">Save</button>
+        </div>
+        <div class="row">
+          <div style="flex: 1;">
+            <div style="font-weight: 500; margin-bottom: 4px;">Frontend URL</div>
+            <input id="frontend-url" type="url" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="http://localhost:3000">
+            <div class="muted" style="margin-top: 6px;">Where the JobGuard report UI is hosted.</div>
+          </div>
+          <button id="btn-save-frontend" class="btn btn-outline">Save</button>
+        </div>
+        <div class="row">
+          <div style="flex: 1;">
+            <div style="font-weight: 500; margin-bottom: 4px;">Access token</div>
+            <input id="api-token" type="password" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="Paste your API_TOKEN from Render">
+            <div class="muted" style="margin-top: 6px;">Shared secret that gates the backend + report UI.</div>
+          </div>
+          <button id="btn-save-token" class="btn btn-outline">Save</button>
+        </div>
+      </div>
+    </details>
 
     <div class="section">
       <h2>About</h2>
