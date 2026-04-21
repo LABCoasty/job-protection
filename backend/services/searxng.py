@@ -1,4 +1,4 @@
-"""Search service with automatic failover: Google CSE → Brave → SearXNG.
+"""Search service with automatic failover: Google CSE → Tavily → Brave → SearXNG.
 
 Each provider returns None on error (network, quota, auth) so the dispatcher
 tries the next one. Returns [] only when the search succeeded but had no hits.
@@ -31,6 +31,35 @@ def _search_google_cse(query: str, api_key: str, cse_id: str, max_results: int =
         "title": item.get("title") or "",
         "url": item.get("link") or "",
         "content": item.get("snippet") or "",
+    } for item in results[:max_results] if isinstance(item, dict)]
+
+
+def _search_tavily(query: str, api_key: str, max_results: int = 5):
+    """Returns list[dict] on success, None on error."""
+    url = "https://api.tavily.com/search"
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            r = client.post(
+                url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "api_key": api_key,
+                    "query": query,
+                    "max_results": max_results,
+                    "search_depth": "basic",
+                },
+            )
+        if r.status_code in (401, 403, 429):
+            return None
+        r.raise_for_status()
+        data = r.json()
+    except (httpx.HTTPError, httpx.RequestError, ValueError):
+        return None
+    results = data.get("results") or []
+    return [{
+        "title": item.get("title") or "",
+        "url": item.get("url") or "",
+        "content": item.get("content") or "",
     } for item in results[:max_results] if isinstance(item, dict)]
 
 
@@ -87,6 +116,11 @@ def _active_providers():
         providers.append((
             "google",
             lambda q, n: _search_google_cse(q, config["google_cse_api_key"], config["google_cse_id"], n),
+        ))
+    if config.get("tavily_api_key"):
+        providers.append((
+            "tavily",
+            lambda q, n: _search_tavily(q, config["tavily_api_key"], n),
         ))
     if config.get("brave_api_key"):
         providers.append((

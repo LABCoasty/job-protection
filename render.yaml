@@ -20,6 +20,8 @@ services:
         sync: false
       - key: GOOGLE_CSE_ID
         sync: false
+      - key: TAVILY_API_KEY
+        sync: false
       - key: BRAVE_API_KEY
         sync: false
       - key: DATABASE_URL

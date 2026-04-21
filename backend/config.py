@@ -7,9 +7,10 @@ from functools import lru_cache
 @lru_cache
 def get_config():
     return {
-        # Search providers (priority: Google CSE > Brave > SearXNG)
+        # Search providers (priority: Google CSE > Tavily > Brave > SearXNG)
         "google_cse_api_key": os.getenv("GOOGLE_CSE_API_KEY"),  # Google Custom Search API key
         "google_cse_id": os.getenv("GOOGLE_CSE_ID"),  # Programmable Search Engine ID (cx)
+        "tavily_api_key": os.getenv("TAVILY_API_KEY"),
         "brave_api_key": os.getenv("BRAVE_API_KEY"),
         "searxng_url": os.getenv("SEARXNG_URL", "http://localhost:8080"),
         # LLM providers
