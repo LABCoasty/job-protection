@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JobGuard Options</title>
+  <style>
+    :root {
+      --background: oklch(0.13 0.01 250);
+      --foreground: oklch(0.95 0 0);
+      --card: oklch(0.17 0.01 250);
+      --primary: oklch(0.75 0.15 175);
+      --primary-foreground: oklch(0.13 0.01 250);
+      --muted-foreground: oklch(0.6 0.02 220);
+      --border: oklch(0.28 0.01 250);
+      --success: oklch(0.7 0.18 145);
+      --danger: oklch(0.6 0.2 25);
+      --radius: 0.5rem;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      background: var(--background);
+      color: var(--foreground);
+      min-height: 100vh;
+    }
+    .container { max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px 0; }
+    .subtitle { color: var(--muted-foreground); margin: 0 0 24px 0; font-size: 13px; }
+    .section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .section h2 { font-size: 15px; margin: 0 0 12px 0; font-weight: 600; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .row + .row { margin-top: 12px; }
+    .muted { color: var(--muted-foreground); font-size: 13px; }
+    .btn {
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border: none;
+      border-radius: var(--radius);
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-outline {
+      background: transparent;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-pill.connected { background: color-mix(in oklch, var(--success) 15%, transparent); color: var(--success); }
+    .status-pill.disconnected { background: color-mix(in oklch, var(--muted-foreground) 15%, transparent); color: var(--muted-foreground); }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; }
+    a { color: var(--primary); }
+    .switch {
+      position: relative; display: inline-block; width: 42px; height: 24px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0;
+      background: var(--border); border-radius: 999px; transition: 0.2s;
+      cursor: pointer;
+    }
+    .slider::before {
+      content: ""; position: absolute; height: 18px; width: 18px;
+      left: 3px; top: 3px; background: white; border-radius: 50%;
+      transition: 0.2s;
+    }
+    input:checked + .slider { background: var(--primary); }
+    input:checked + .slider::before { transform: translateX(18px); }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--card); border: 1px solid var(--border);
+      padding: 10px 16px; border-radius: var(--radius); font-size: 13px;
+      opacity: 0; transition: opacity 0.2s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { border-color: var(--danger); color: var(--danger); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>JobGuard settings</h1>
+    <p class="subtitle">Research project. Local-first. Your data stays with you.</p>
+
+    <div class="section">
+      <h2>Google Sheets export</h2>
+      <div class="row">
+        <div>
+          <div><span id="sheets-pill" class="status-pill disconnected"><span class="dot"></span><span id="sheets-pill-text">Not connected</span></span></div>
+          <div class="muted" id="sheets-info" style="margin-top: 6px;">Connect to log every scan to your own Google Sheet.</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btn-connect" class="btn">Connect Google Sheets</button>
+          <button id="btn-disconnect" class="btn btn-danger" style="display: none;">Disconnect</button>
+        </div>
+      </div>
+      <div class="row" id="row-autolog" style="display: none;">
+        <div>
+          <div>Auto-log every scan</div>
+          <div class="muted">Appends a row to your sheet after each successful scan.</div>
+        </div>
+        <label class="switch">
+          <input id="toggle-autolog" type="checkbox">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Backend URL</h2>
+      <div class="row">
+        <div style="flex: 1;">
+          <input id="backend-url" type="url" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="http://localhost:8000">
+          <div class="muted" style="margin-top: 6px;">Where the JobGuard FastAPI backend is running.</div>
+        </div>
+        <button id="btn-save-backend" class="btn btn-outline">Save</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Frontend URL</h2>
+      <div class="row">
+        <div style="flex: 1;">
+          <input id="frontend-url" type="url" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="http://localhost:3000">
+          <div class="muted" style="margin-top: 6px;">Where the JobGuard report UI is hosted (shown in the side panel after a scan).</div>
+        </div>
+        <button id="btn-save-frontend" class="btn btn-outline">Save</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>About</h2>
+      <div class="muted">
+        JobGuard is a research tool. It verifies job listings before you apply and exports scan history to your Google Sheet. Sheets OAuth runs entirely in-browser — no credentials leave your machine.
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

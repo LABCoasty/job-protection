@@ -1,0 +1,9 @@
+# Minimal overrides for JobGuard: enable JSON API and bind to 8080
+search:
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"

@@ -1,0 +1,43 @@
+# JobGuard local dev: SearXNG, Ollama, optional PostgreSQL.
+# Backend and frontend run on host (see README).
+
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: jobguard-searxng
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jobguard-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # After start, run: docker exec -it jobguard-ollama ollama pull qwen2:7b
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: jobguard-postgres
+    environment:
+      POSTGRES_USER: truepost
+      POSTGRES_PASSWORD: truepost
+      POSTGRES_DB: truepost
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    profiles:
+      - db
+
+volumes:
+  ollama_data:
+  postgres_data:

@@ -1,0 +1,28 @@
+# JobGuard backend deploy (Render blueprint).
+# One-click deploy: push this repo to GitHub, then New + → Blueprint on Render.
+# Set GROQ_API_KEY, BRAVE_API_KEY, DATABASE_URL in the Render dashboard after create.
+
+services:
+  - type: web
+    name: jobguard-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GOOGLE_CSE_API_KEY
+        sync: false
+      - key: GOOGLE_CSE_ID
+        sync: false
+      - key: BRAVE_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SCAN_CACHE_TTL_SECONDS
+        value: "3600"

@@ -1,0 +1,33 @@
+# Secrets — NEVER commit
+key.pem
+*.pem
+*.key
+.env
+.env.local
+.env.*.local
+!.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.pnpm-store/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Build artifacts
+dist/
+build/

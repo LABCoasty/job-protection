@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5l97R5dAwD8EQkWCFkwPyXAotbxdsUnwUzy43zcJ9J1LRoXF3KYn5nlnBKk5Sr1WNvCBeonStWpDe+WcCEGz2FMOZjBuX1s6vJ6pBwQonycsZ87ra3XUPWlpFKF2r9PyFpHF1liLadS5VkKP6si/NiQ2oJTZ3IV5ElOBkLJxNiAwcoWwMh4+XddVY4f6wChixzA6+1KyVHrK5AAjHNkkrpFKbygAbEr7il1XwIeT1dvD/BdxlCoqmKTwmZRf7k31sCKuVq5Onw/7VdLtAJGTpCcLaWrWnr8N5OMyXlF8XTYx8Z52UwxXKF6EkhrzfTuUCeF96S5am+IVT28odQBtOQIDAQAB",
+  "name": "JobGuard",
+  "version": "0.1.0",
+  "description": "Verify job listings before you apply. Risk scores and evidence-based analysis.",
+  "permissions": ["activeTab", "scripting", "sidePanel", "identity", "storage"],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://linkedin.com/*",
+    "https://www.indeed.com/*",
+    "https://indeed.com/*",
+    "http://localhost:8000/*",
+    "http://localhost:3000/*",
+    "https://sheets.googleapis.com/*",
+    "https://www.googleapis.com/*",
+    "https://oauth2.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "JobGuard – Scan this job"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/panel.html"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "oauth2": {
+    "client_id": "61013098934-ubs48k3o568c3bf335m2ts1qi4eilorj.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/jobs/*", "https://linkedin.com/jobs/*"],
+      "js": ["content/linkedin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.indeed.com/*", "https://indeed.com/*"],
+      "js": ["content/indeed.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
