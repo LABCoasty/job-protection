@@ -58,21 +58,6 @@ export function JobGuardApp() {
       })
   }, [])
 
-  if (!hasToken) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="max-w-md text-center space-y-4">
-          <h1 className="text-2xl font-semibold">Access restricted</h1>
-          <p className="text-muted-foreground">
-            JobGuard reports are only viewable through the JobGuard Chrome extension.
-            Install the extension, configure your access token in its options, and open a
-            scan from there.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   const handleNavigate = useCallback((screen: Screen) => {
     setCurrentScreen(screen)
   }, [])
@@ -103,6 +88,21 @@ export function JobGuardApp() {
   const handleBack = useCallback(() => {
     setCurrentScreen("home")
   }, [])
+
+  if (!hasToken) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-4">
+          <h1 className="text-2xl font-semibold">Access restricted</h1>
+          <p className="text-muted-foreground">
+            JobGuard reports are only viewable through the JobGuard Chrome extension.
+            Install the extension, configure your access token in its options, and open a
+            scan from there.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
