@@ -24,8 +24,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
         const payload = results?.[0]?.result;
-        if (!payload?.jobTitle) {
-          sendResponse({ error: "Could not extract job data from this page." });
+        // Accept the payload if either the title OR a substantial description
+        // is present — the backend LLM extracts title/company from description
+        // when those are missing (which happens often on LinkedIn list+detail
+        // pages where the "title" element is a section header we reject).
+        const hasContent =
+          payload &&
+          ((payload.jobTitle && payload.jobTitle.length > 0) ||
+            (payload.description && payload.description.length > 200));
+        if (!hasContent) {
+          sendResponse({
+            error:
+              "Could not read this page. Open a LinkedIn or Indeed job detail (not search results) and try again.",
+          });
           return;
         }
         sendResponse({ payload });
