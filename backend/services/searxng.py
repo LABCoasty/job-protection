@@ -144,25 +144,88 @@ def search(query: str, max_results: int = 5) -> list[dict]:
     return []
 
 
-def gather_evidence(company_name: str, domain: str | None = None) -> str:
-    """Run 2-3 queries to verify company legitimacy; returns a snippets block."""
-    parts = []
-    queries: list[str] = []
-    if company_name:
-        queries.append(f'"{company_name}" official website')
-        queries.append(f'"{company_name}" company scam reviews')
-    if domain:
-        queries.append(f'"{domain}" reviews legitimacy')
+_EVIDENCE_AXES = [
+    (
+        "legitimacy",
+        'Legitimacy & basic existence',
+        '"{company}" company about OR "headquartered in" OR founded',
+    ),
+    (
+        "fraud",
+        'Fraud, scam, and ghost-job signals',
+        '"{company}" scam OR fraud OR "ghost job" OR complaint OR "fake job"',
+    ),
+    (
+        "reviews",
+        'Employee & customer reviews',
+        '"{company}" reviews Glassdoor OR Trustpilot OR Indeed',
+    ),
+    (
+        "legal",
+        'Lawsuits, court cases, regulatory action',
+        '"{company}" lawsuit OR "class action" OR "wage theft" OR SEC OR FTC',
+    ),
+    (
+        "layoffs",
+        'Layoffs and financial health',
+        '"{company}" layoffs OR "mass layoff" OR bankruptcy OR "round of cuts"',
+    ),
+    (
+        "data_privacy",
+        'Data handling & privacy policy (do they sell your data?)',
+        '"{company}" privacy policy "sell" OR "share personal" OR "third parties" OR "do not sell"',
+    ),
+]
 
-    # Brave free tier: 1 req/sec. Throttle if Brave is in the active chain.
+
+def gather_evidence(company_name: str, domain: str | None = None) -> str:
+    """Deep-dive company investigation across multiple axes.
+
+    Returns a single labeled text block for the LLM, structured as:
+
+        === Legitimacy & basic existence ===
+        [Title] snippet
+        [Title] snippet
+
+        === Fraud, scam, and ghost-job signals ===
+        ...
+
+    Returns 'No external search results available.' if nothing turned up.
+    """
+    if not company_name:
+        return "No company name provided."
+
     providers = _active_providers()
     needs_throttle = any(name == "brave" for name, _ in providers)
 
-    for idx, q in enumerate(queries):
-        for hit in search(q, max_results=3):
-            if hit.get("content"):
-                parts.append(f"[{hit.get('title', '')}]\n{hit['content']}")
+    sections: list[str] = []
+    queries: list[tuple[str, str]] = []  # (axis_label, full_query)
+    for _key, label, template in _EVIDENCE_AXES:
+        queries.append((label, template.format(company=company_name)))
+    if domain and domain.lower() not in company_name.lower():
+        queries.append((
+            "Domain verification",
+            f'"{domain}" OR site:{domain} legitimacy OR reviews OR reputation',
+        ))
+
+    for idx, (label, q) in enumerate(queries):
+        hits = search(q, max_results=4)
+        lines: list[str] = []
+        for hit in hits:
+            snippet = (hit.get("content") or "").strip()
+            if not snippet:
+                continue
+            title = (hit.get("title") or "").strip()
+            url = (hit.get("url") or "").strip()
+            host = ""
+            if url:
+                m = url.split("//", 1)[-1].split("/", 1)[0]
+                host = m
+            header = f"[{title}] ({host})" if host else f"[{title}]"
+            lines.append(f"{header}\n{snippet}")
+        if lines:
+            sections.append(f"=== {label} ===\n" + "\n\n".join(lines))
         if needs_throttle and idx < len(queries) - 1:
             time.sleep(1.1)
 
-    return "\n\n---\n\n".join(parts) if parts else "No external search results available."
+    return "\n\n".join(sections) if sections else "No external search results available."

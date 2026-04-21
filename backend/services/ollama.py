@@ -9,19 +9,29 @@ from schemas import CompanySignal, JobPostSignal
 
 
 def _build_prompt(snapshot: dict, description: str, search_evidence: str) -> str:
-    return f"""You are a job listing fraud and ghost-job analyst. Analyze the following job posting and external search evidence. Output only valid JSON (no markdown, no extra text) with this exact structure:
+    return f"""You are a job listing fraud analyst protecting a jobseeker from ghost jobs, scams, and untrustworthy employers. You have been given a job posting plus a deep-dive web investigation of the company across multiple axes (legitimacy, fraud reports, reviews, legal actions, layoffs, data-privacy practices).
+
+Analyze ALL of this evidence carefully. For companySignals, create one signal for EACH of the evidence axes present in the external evidence — use the section headers ("Legitimacy & basic existence", "Fraud, scam, and ghost-job signals", "Employee & customer reviews", "Lawsuits, court cases, regulatory action", "Layoffs and financial health", "Data handling & privacy policy (do they sell your data?)") to guide you. If an axis has no evidence, mark it "warn" with evidence noting the gap. If an axis has positive evidence (e.g., company is in SEC filings, clear privacy policy that doesn't sell data), mark it "good". If concerning (scam reports, lawsuits, mass layoffs, data sold to third parties), mark it "bad".
+
+Output only valid JSON (no markdown, no extra text) with this exact structure:
 
 {{
-  "trustScore": <0-100 integer>,
+  "trustScore": <0-100 integer: how trustworthy is this listing + company>,
   "riskLevel": "low" | "medium" | "high",
-  "primaryWarning": "<one sentence summary for the user>",
+  "primaryWarning": "<one sentence summary for the user — lead with the biggest concern or biggest green flag>",
   "jobPostSignals": [
-    {{ "id": "1", "status": "good"|"warn"|"bad", "label": "<short label>", "evidence": "<one sentence>" }}
+    {{ "id": "1", "status": "good"|"warn"|"bad", "label": "<short label>", "evidence": "<one sentence citing the listing or description>" }}
   ],
   "companySignals": [
-    {{ "id": "1", "status": "good"|"warn"|"bad", "label": "<short label>", "evidence": "<one sentence>" }}
+    {{ "id": "1", "status": "good"|"warn"|"bad", "label": "<short label>", "evidence": "<one sentence citing specific external evidence>" }}
   ]
 }}
+
+Rules:
+- jobPostSignals: 5-8 signals about the listing itself (salary presence, description quality, urgency language, contact legitimacy, etc.)
+- companySignals: 6 signals, one per investigation axis above, using the external evidence directly.
+- Evidence strings must reference what you actually observed — never fabricate.
+- If companyName is "Unknown company" or the listing has almost no content, set trustScore low and flag the extraction failure clearly.
 
 Job listing metadata:
 - Title: {snapshot.get('jobTitle', '')}
@@ -42,8 +52,8 @@ Job listing metadata:
 Job description (excerpt):
 {description[:4000] if description else 'No description provided.'}
 
-External search evidence (company/domain verification):
-{search_evidence[:3000] if search_evidence else 'No external evidence.'}
+External company investigation (labeled sections):
+{search_evidence[:6000] if search_evidence else 'No external evidence.'}
 
 Output only the JSON object, nothing else."""
 
