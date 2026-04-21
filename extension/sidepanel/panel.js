@@ -1,57 +1,129 @@
-import { connect, disconnect, getStatus, setAutoLog } from "../services/google.js";
+import { connect, disconnect, getStatus, setAutoLog, appendScan } from "../services/google.js";
 
 const DEFAULT_FRONTEND_URL = "http://localhost:3000";
+const DEFAULT_BACKEND_URL = "http://localhost:8000";
 
-async function showReport(scanId) {
+// --- Iframe bootstrap -----------------------------------------------------
+// Load the frontend immediately so the user sees JobGuard's real home screen
+// (not a native side-panel stub). Everything — scan, auto-fill, resume,
+// sheets — is driven by postMessage between this panel and the iframe.
+
+async function loadFrontend() {
   const { frontendUrl, apiToken } = await chrome.storage.sync.get(["frontendUrl", "apiToken"]);
-  const base = frontendUrl || DEFAULT_FRONTEND_URL;
-  const params = new URLSearchParams({ scanId });
+  const base = (frontendUrl || DEFAULT_FRONTEND_URL).replace(/\/$/, "");
+  const params = new URLSearchParams();
   if (apiToken) params.set("t", apiToken);
+  const qs = params.toString();
   const iframe = document.getElementById("report-frame");
-  iframe.src = `${base}/?${params.toString()}`;
-  document.body.classList.add("report");
+  iframe.src = qs ? `${base}/?${qs}` : `${base}/`;
+}
+loadFrontend();
+
+function frameWindow() {
+  return document.getElementById("report-frame")?.contentWindow || null;
 }
 
-// Bridge messages from the frontend iframe (Export screen, etc.) to chrome
-// APIs that iframes can't call directly (chrome.identity, chrome.storage).
-async function pushGoogleStatus() {
-  const iframe = document.getElementById("report-frame");
-  if (!iframe?.contentWindow) return;
-  const s = await getStatus().catch(() => ({ connected: false }));
-  iframe.contentWindow.postMessage(
-    {
-      type: "JOBGUARD_GOOGLE_STATUS",
-      connected: s.connected,
-      spreadsheetUrl: s.spreadsheetUrl,
-      autoLog: s.autoLog,
-    },
-    "*"
-  );
+function post(type, payload = {}) {
+  frameWindow()?.postMessage({ type, ...payload }, "*");
 }
+
+// --- Extraction + scan orchestration --------------------------------------
+
+const hasContent = (p) =>
+  p && ((p.jobTitle && p.jobTitle.length > 0) || (p.description && p.description.length > 200));
+
+async function extractFromActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error("No active tab.");
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_AND_SCAN" });
+    if (hasContent(response?.payload)) return response.payload;
+    if (response?.error) throw new Error(response.error);
+  } catch (_) {
+    // content script not injected — fall back via background
+    const fallback = await chrome.runtime.sendMessage({ type: "EXTRACT_IN_TAB", tabId: tab.id });
+    if (hasContent(fallback?.payload)) return fallback.payload;
+    if (fallback?.error) throw new Error(fallback.error);
+  }
+  throw new Error("Could not read this page. Open a LinkedIn or Indeed job and try again.");
+}
+
+async function runScan(requestId) {
+  try {
+    post("SCAN_PROGRESS", { requestId, step: "extract" });
+    const payload = await extractFromActiveTab();
+    if (!payload.jobTitle) payload.jobTitle = "Unknown (extract from description)";
+    if (!payload.companyName) payload.companyName = "Unknown (extract from description)";
+    post("SCAN_PROGRESS", { requestId, step: "analyze" });
+
+    const { backendUrl, apiToken } = await chrome.storage.sync.get(["backendUrl", "apiToken"]);
+    const { resumeText } = await chrome.storage.local.get(["resumeText"]);
+    const backend = backendUrl || DEFAULT_BACKEND_URL;
+    const headers = { "Content-Type": "application/json" };
+    if (apiToken) headers["X-API-Token"] = apiToken;
+    const body = { ...payload };
+    if (resumeText) body.resumeText = resumeText;
+
+    const res = await fetch(`${backend}/scan`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Backend ${res.status}: ${text}`);
+    }
+    const data = await res.json();
+    const scanId = data.scanId;
+    const result = data.result;
+
+    let loggedToSheet = false;
+    try {
+      const status = await getStatus();
+      if (status.connected && status.autoLog && result) {
+        await appendScan(result);
+        loggedToSheet = true;
+      }
+    } catch (e) {
+      console.warn("JobGuard: Sheets log failed:", e);
+    }
+
+    post("SCAN_COMPLETE", { requestId, scanId, result, loggedToSheet });
+  } catch (e) {
+    post("SCAN_ERROR", { requestId, error: String(e.message || e) });
+  }
+}
+
+// --- Google Sheets bridge -------------------------------------------------
+
+async function pushGoogleStatus() {
+  const s = await getStatus().catch(() => ({ connected: false }));
+  post("JOBGUARD_GOOGLE_STATUS", {
+    connected: s.connected,
+    spreadsheetUrl: s.spreadsheetUrl,
+    autoLog: s.autoLog,
+  });
+}
+
+// --- Resume bridge --------------------------------------------------------
 
 async function pushResumeData() {
-  const iframe = document.getElementById("report-frame");
-  if (!iframe?.contentWindow) return;
   const { resumeText, resumeUpdatedAt, resumeParsed } = await chrome.storage.local.get([
     "resumeText",
     "resumeUpdatedAt",
     "resumeParsed",
   ]);
-  iframe.contentWindow.postMessage(
-    {
-      type: "JOBGUARD_RESUME_DATA",
-      text: resumeText || "",
-      length: resumeText ? resumeText.length : 0,
-      updatedAt: resumeUpdatedAt || null,
-      parsed: resumeParsed || null,
-    },
-    "*"
-  );
+  post("JOBGUARD_RESUME_DATA", {
+    text: resumeText || "",
+    length: resumeText ? resumeText.length : 0,
+    updatedAt: resumeUpdatedAt || null,
+    parsed: resumeParsed || null,
+  });
 }
 
 async function parseResumeOnBackend(text) {
   const { backendUrl, apiToken } = await chrome.storage.sync.get(["backendUrl", "apiToken"]);
-  const backend = backendUrl || "http://localhost:8000";
+  const backend = backendUrl || DEFAULT_BACKEND_URL;
   const headers = { "Content-Type": "application/json" };
   if (apiToken) headers["X-API-Token"] = apiToken;
   const res = await fetch(`${backend}/parse-resume`, {
@@ -64,64 +136,104 @@ async function parseResumeOnBackend(text) {
   return data.parsed || null;
 }
 
+// --- Auto-fill ------------------------------------------------------------
+
+async function runAutofill(requestId) {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error("No active tab.");
+    const { resumeParsed } = await chrome.storage.local.get(["resumeParsed"]);
+    if (!resumeParsed) {
+      throw new Error("No parsed resume yet. Open the Resume tab and click Parse first.");
+    }
+    const res = await chrome.tabs.sendMessage(tab.id, { action: "AUTOFILL_FORM" }).catch((e) => ({
+      ok: false,
+      error:
+        "Auto-fill isn't available on this page. Open an apply form on LinkedIn, Greenhouse, Lever, Workday, Workable, Ashby, SmartRecruiters, BambooHR, iCIMS, or Taleo.",
+      detail: e?.message,
+    }));
+    if (!res?.ok) {
+      throw new Error(res?.error || "Auto-fill failed.");
+    }
+    post("AUTOFILL_COMPLETE", {
+      requestId,
+      filled: res.filled || 0,
+      missing: res.missing || [],
+    });
+  } catch (e) {
+    post("AUTOFILL_ERROR", { requestId, error: String(e.message || e) });
+  }
+}
+
+// --- Message router -------------------------------------------------------
+
 window.addEventListener("message", async (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
   try {
-    if (data.type === "JOBGUARD_GET_GOOGLE_STATUS") {
-      await pushGoogleStatus();
-    } else if (data.type === "JOBGUARD_CONNECT_GOOGLE") {
-      // Try interactive OAuth directly from this (top-level extension) context.
-      // If Chrome refuses due to user-gesture rules, fall back to Options page.
-      try {
-        await connect();
+    switch (data.type) {
+      case "SCAN_REQUEST":
+        runScan(data.requestId || null);
+        break;
+      case "AUTOFILL_REQUEST":
+        runAutofill(data.requestId || null);
+        break;
+      case "JOBGUARD_GET_GOOGLE_STATUS":
         await pushGoogleStatus();
-      } catch (err) {
-        console.warn("Direct connect failed, opening options page:", err);
-        chrome.runtime.openOptionsPage();
+        break;
+      case "JOBGUARD_CONNECT_GOOGLE":
+        try {
+          await connect();
+          await pushGoogleStatus();
+        } catch (err) {
+          console.warn("Direct connect failed, opening options page:", err);
+          chrome.runtime.openOptionsPage();
+        }
+        break;
+      case "JOBGUARD_DISCONNECT_GOOGLE":
+        await disconnect();
+        await pushGoogleStatus();
+        break;
+      case "JOBGUARD_SET_AUTOLOG":
+        await setAutoLog(Boolean(data.value));
+        await pushGoogleStatus();
+        break;
+      case "JOBGUARD_GET_RESUME":
+        await pushResumeData();
+        break;
+      case "JOBGUARD_SAVE_RESUME": {
+        const text = (data.text || "").toString().slice(0, 40000);
+        await chrome.storage.local.set({
+          resumeText: text,
+          resumeUpdatedAt: new Date().toISOString(),
+        });
+        await pushResumeData();
+        break;
       }
-    } else if (data.type === "JOBGUARD_DISCONNECT_GOOGLE") {
-      await disconnect();
-      await pushGoogleStatus();
-    } else if (data.type === "JOBGUARD_SET_AUTOLOG") {
-      await setAutoLog(Boolean(data.value));
-      await pushGoogleStatus();
-    } else if (data.type === "JOBGUARD_GET_RESUME") {
-      await pushResumeData();
-    } else if (data.type === "JOBGUARD_SAVE_RESUME") {
-      const text = (data.text || "").toString().slice(0, 40000);
-      await chrome.storage.local.set({
-        resumeText: text,
-        resumeUpdatedAt: new Date().toISOString(),
-      });
-      await pushResumeData();
-    } else if (data.type === "JOBGUARD_CLEAR_RESUME") {
-      await chrome.storage.local.remove(["resumeText", "resumeUpdatedAt", "resumeParsed"]);
-      await pushResumeData();
-    } else if (data.type === "JOBGUARD_PARSE_RESUME") {
-      const text = (data.text || "").toString();
-      let parsed = null;
-      try {
-        parsed = await parseResumeOnBackend(text);
-      } catch (e) {
-        console.warn("parse-resume error:", e);
+      case "JOBGUARD_CLEAR_RESUME":
+        await chrome.storage.local.remove(["resumeText", "resumeUpdatedAt", "resumeParsed"]);
+        await pushResumeData();
+        break;
+      case "JOBGUARD_PARSE_RESUME": {
+        let parsed = null;
+        try {
+          parsed = await parseResumeOnBackend((data.text || "").toString());
+        } catch (e) {
+          console.warn("parse-resume error:", e);
+        }
+        if (parsed) {
+          await chrome.storage.local.set({ resumeParsed: parsed });
+        }
+        post("JOBGUARD_RESUME_PARSED", { parsed });
+        await pushResumeData();
+        break;
       }
-      if (parsed) {
-        await chrome.storage.local.set({ resumeParsed: parsed });
-      }
-      const iframe = document.getElementById("report-frame");
-      iframe?.contentWindow?.postMessage(
-        { type: "JOBGUARD_RESUME_PARSED", parsed },
-        "*"
-      );
-      await pushResumeData();
     }
   } catch (e) {
     console.warn("JobGuard bridge error:", e);
   }
 });
 
-// Keep the iframe's status in sync when the user returns from the Options page.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync" && ("spreadsheetId" in changes || "autoLog" in changes)) {
     pushGoogleStatus();
@@ -129,126 +241,4 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && ("resumeText" in changes || "resumeParsed" in changes || "resumeUpdatedAt" in changes)) {
     pushResumeData();
   }
-});
-
-function showScan() {
-  document.getElementById("report-frame").src = "";
-  document.body.classList.remove("report");
-}
-
-document.getElementById("scan-another").addEventListener("click", showScan);
-document.getElementById("open-options").addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
-});
-document.getElementById("open-resume")?.addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
-});
-document.getElementById("open-sheets")?.addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
-});
-
-document.getElementById("autofill")?.addEventListener("click", async () => {
-  const btn = document.getElementById("autofill");
-  const status = document.getElementById("status");
-  status.classList.remove("error", "success");
-  btn.disabled = true;
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) {
-      status.textContent = "No active tab.";
-      status.classList.add("error");
-      return;
-    }
-    const { resumeParsed } = await chrome.storage.local.get(["resumeParsed"]);
-    if (!resumeParsed) {
-      status.textContent = "Parse your resume first (Resume → Parse).";
-      status.classList.add("error");
-      return;
-    }
-    status.textContent = "Filling form…";
-    const res = await chrome.tabs.sendMessage(tab.id, { action: "AUTOFILL_FORM" }).catch((e) => ({
-      ok: false,
-      error: `No auto-fill on this page (${e?.message || "extension not injected here"}). Open an apply form on LinkedIn, Greenhouse, Lever, Workday, Workable, or similar.`,
-    }));
-    if (!res?.ok) {
-      status.textContent = res?.error || "Auto-fill failed.";
-      status.classList.add("error");
-      return;
-    }
-    const missing = (res.missing || []).length;
-    status.textContent = `Filled ${res.filled} field${res.filled === 1 ? "" : "s"}${missing ? ` · ${missing} not found` : ""}`;
-    status.classList.add("success");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-document.getElementById("scan").addEventListener("click", async () => {
-  const btn = document.getElementById("scan");
-  const status = document.getElementById("status");
-  btn.disabled = true;
-  status.textContent = "Extracting job data…";
-  status.classList.remove("error");
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) {
-    status.textContent = "No active tab.";
-    status.classList.add("error");
-    btn.disabled = false;
-    return;
-  }
-
-  const hasContent = (p) =>
-    p && (
-      (p.jobTitle && p.jobTitle.length > 0) ||
-      (p.description && p.description.length > 200)
-    );
-
-  let payload = null;
-  try {
-    const response = await chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_AND_SCAN" });
-    if (hasContent(response?.payload)) payload = response.payload;
-    else if (response?.error) status.textContent = response.error;
-  } catch (_) {
-    try {
-      const fallback = await chrome.runtime.sendMessage({ type: "EXTRACT_IN_TAB", tabId: tab.id });
-      if (hasContent(fallback?.payload)) payload = fallback.payload;
-      else if (fallback?.error) status.textContent = fallback.error;
-    } catch (e) {
-      status.textContent = "Could not read this page. Open a LinkedIn or Indeed job and try again.";
-      status.classList.add("error");
-      btn.disabled = false;
-      return;
-    }
-  }
-
-  if (!payload) {
-    status.textContent = status.textContent || "Could not extract job data. Open a LinkedIn or Indeed job page.";
-    status.classList.add("error");
-    btn.disabled = false;
-    return;
-  }
-  // Provide sensible defaults for fields we expect to be non-empty server-side
-  // so the LLM can still analyze. It'll extract the real values from description.
-  if (!payload.jobTitle) payload.jobTitle = "Unknown (extract from description)";
-  if (!payload.companyName) payload.companyName = "Unknown (extract from description)";
-
-  status.textContent = "Analyzing…";
-  try {
-    const backResponse = await chrome.runtime.sendMessage({ type: "SCAN", payload });
-    if (backResponse?.error) {
-      status.textContent = backResponse.error;
-      status.classList.add("error");
-    } else {
-      if (backResponse.loggedToSheet) {
-        status.textContent = "Logged to Google Sheets";
-        status.classList.add("success");
-      }
-      await showReport(backResponse.scanId);
-    }
-  } catch (e) {
-    status.textContent = "Backend error. Is the server running?";
-    status.classList.add("error");
-  }
-  btn.disabled = false;
 });

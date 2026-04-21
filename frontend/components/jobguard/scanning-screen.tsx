@@ -12,6 +12,12 @@ interface ScanningScreenProps {
   listingPayload: ScanRequestPayload | null
   onComplete: (result: ScanResult) => void
   onBack: () => void
+  // When true, the extension side panel is driving the scan; we just animate
+  // while it extracts + calls the backend, and jobguard-app will navigate us
+  // to Results when SCAN_COMPLETE arrives. Don't try to postScan ourselves.
+  awaitingExtension?: boolean
+  // Error bubbled up from the parent (SCAN_ERROR); renders instead of the steps.
+  externalError?: string | null
 }
 
 const scanSteps = [
@@ -21,12 +27,26 @@ const scanSteps = [
   "Building report",
 ]
 
-export function ScanningScreen({ listingPayload, onComplete, onBack }: ScanningScreenProps) {
+export function ScanningScreen({
+  listingPayload,
+  onComplete,
+  onBack,
+  awaitingExtension = false,
+  externalError = null,
+}: ScanningScreenProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [showUseExtension, setShowUseExtension] = useState(false)
 
   useEffect(() => {
+    if (awaitingExtension) {
+      // Parent handles everything. Just loop the step animation so the user
+      // sees progress until SCAN_COMPLETE arrives.
+      const interval = setInterval(() => {
+        setCurrentStep((prev) => (prev + 1) % scanSteps.length)
+      }, 900)
+      return () => clearInterval(interval)
+    }
     if (listingPayload?.jobTitle) {
       setError(null)
       const stepInterval = setInterval(() => {
@@ -45,7 +65,7 @@ export function ScanningScreen({ listingPayload, onComplete, onBack }: ScanningS
         .finally(() => clearInterval(stepInterval))
       return () => clearInterval(stepInterval)
     }
-    // No payload: show steps then prompt to use extension
+    // No payload, no extension: show steps then prompt to use the extension.
     const interval = setInterval(() => {
       setCurrentStep((prev) => {
         if (prev >= scanSteps.length - 1) {
@@ -57,7 +77,9 @@ export function ScanningScreen({ listingPayload, onComplete, onBack }: ScanningS
       })
     }, 800)
     return () => clearInterval(interval)
-  }, [listingPayload, onComplete])
+  }, [listingPayload, onComplete, awaitingExtension])
+
+  const displayError = externalError || error
 
   if (showUseExtension) {
     return (
@@ -74,11 +96,11 @@ export function ScanningScreen({ listingPayload, onComplete, onBack }: ScanningS
     )
   }
 
-  if (error) {
+  if (displayError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-8">
         <div className="w-full max-w-sm space-y-6 text-center">
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="text-sm text-destructive">{displayError}</p>
           <Button variant="outline" onClick={onBack}>
             Back to home
           </Button>

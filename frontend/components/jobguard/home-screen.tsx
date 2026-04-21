@@ -1,15 +1,16 @@
 "use client"
 
-import { Scan, Shield, Building2, AlertTriangle } from "lucide-react"
+import { Scan, Shield, Building2, AlertTriangle, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
 interface HomeScreenProps {
   onScan: () => void
+  onAutofill?: () => void
   detectedPlatform: string | null
 }
 
-export function HomeScreen({ onScan, detectedPlatform }: HomeScreenProps) {
+export function HomeScreen({ onScan, onAutofill, detectedPlatform }: HomeScreenProps) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-8">
       <div className="w-full max-w-sm space-y-8 text-center">
@@ -45,6 +46,18 @@ export function HomeScreen({ onScan, detectedPlatform }: HomeScreenProps) {
           <Scan className="w-5 h-5" />
           Scan this listing
         </Button>
+
+        {onAutofill && (
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-full h-12 text-sm font-medium gap-2"
+            onClick={onAutofill}
+          >
+            <Wand2 className="w-4 h-4" />
+            Auto-fill application
+          </Button>
+        )}
 
         {/* Features */}
         <div className="grid grid-cols-2 gap-3 pt-4">
