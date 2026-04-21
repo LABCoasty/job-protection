@@ -16,6 +16,11 @@ interface ScanningScreenProps {
   // while it extracts + calls the backend, and jobguard-app will navigate us
   // to Results when SCAN_COMPLETE arrives. Don't try to postScan ourselves.
   awaitingExtension?: boolean
+  // True when we're rendered inside the Chrome extension. If so, we NEVER
+  // show the "use the extension" fallback — the parent side panel is in
+  // charge of orchestrating extract + backend, and will send SCAN_ERROR
+  // if anything goes wrong.
+  inExtensionMode?: boolean
   // Error bubbled up from the parent (SCAN_ERROR); renders instead of the steps.
   externalError?: string | null
   // Called when the user clicks "Try again" from the error state.
@@ -34,6 +39,7 @@ export function ScanningScreen({
   onComplete,
   onBack,
   awaitingExtension = false,
+  inExtensionMode = false,
   externalError = null,
   onRetry,
 }: ScanningScreenProps) {
@@ -42,16 +48,23 @@ export function ScanningScreen({
   const [showUseExtension, setShowUseExtension] = useState(false)
 
   useEffect(() => {
+    // 1. Parent is driving — animate while we wait.
     if (awaitingExtension) {
-      // Parent handles everything. Just loop the step animation so the user
-      // sees progress until SCAN_COMPLETE arrives.
+      setShowUseExtension(false)
       const interval = setInterval(() => {
         setCurrentStep((prev) => (prev + 1) % scanSteps.length)
       }, 900)
       return () => clearInterval(interval)
     }
+    // 2. External error arrived — nothing to animate; error screen renders.
+    if (externalError) {
+      setShowUseExtension(false)
+      return
+    }
+    // 3. We have a payload and are running the scan directly.
     if (listingPayload?.jobTitle) {
       setError(null)
+      setShowUseExtension(false)
       const stepInterval = setInterval(() => {
         setCurrentStep((prev) => (prev >= scanSteps.length - 1 ? prev : prev + 1))
       }, 800)
@@ -68,7 +81,11 @@ export function ScanningScreen({
         .finally(() => clearInterval(stepInterval))
       return () => clearInterval(stepInterval)
     }
-    // No payload, no extension: show steps then prompt to use the extension.
+    // 4. Extension mode but nothing's pending — parent will drive; stay silent.
+    if (inExtensionMode) {
+      return
+    }
+    // 5. Pure standalone dev mode fallback: "use the extension".
     const interval = setInterval(() => {
       setCurrentStep((prev) => {
         if (prev >= scanSteps.length - 1) {
@@ -80,25 +97,11 @@ export function ScanningScreen({
       })
     }, 800)
     return () => clearInterval(interval)
-  }, [listingPayload, onComplete, awaitingExtension])
+  }, [listingPayload, onComplete, awaitingExtension, externalError, inExtensionMode])
 
   const displayError = externalError || error
 
-  if (showUseExtension) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-6">
-        <div className="w-full max-w-md space-y-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            To scan a job listing, use the JobGuard Chrome extension on a LinkedIn or Indeed job page.
-          </p>
-          <Button variant="outline" onClick={onBack}>
-            Back to home
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
+  // Render priority: error first, then standalone fallback, finally the animated scan.
   if (displayError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-6">
@@ -116,6 +119,21 @@ export function ScanningScreen({
               Back to home
             </Button>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (showUseExtension) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-60px)] px-4 py-6">
+        <div className="w-full max-w-md space-y-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            To scan a job listing, use the JobGuard Chrome extension on a LinkedIn or Indeed job page.
+          </p>
+          <Button variant="outline" onClick={onBack}>
+            Back to home
+          </Button>
         </div>
       </div>
     )

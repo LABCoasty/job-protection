@@ -284,6 +284,7 @@ export function JobGuardApp() {
             onComplete={handleScanComplete}
             onBack={handleBack}
             awaitingExtension={inExtensionFrame && scanRequestId !== null}
+            inExtensionMode={inExtensionFrame}
             externalError={scanError}
             onRetry={() => handleScan()}
           />

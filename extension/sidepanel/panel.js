@@ -13,9 +13,11 @@ async function loadFrontend() {
   const base = (frontendUrl || DEFAULT_FRONTEND_URL).replace(/\/$/, "");
   const params = new URLSearchParams();
   if (apiToken) params.set("t", apiToken);
-  const qs = params.toString();
+  // Bust Chrome's iframe-level HTML cache so deploys take effect without a browser restart.
+  // The fingerprinted JS chunks cache normally.
+  params.set("v", String(Date.now()));
   const iframe = document.getElementById("report-frame");
-  iframe.src = qs ? `${base}/?${qs}` : `${base}/`;
+  iframe.src = `${base}/?${params.toString()}`;
 }
 loadFrontend();
 
