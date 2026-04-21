@@ -1,54 +1,128 @@
 (function () {
   function getText(el) {
-    return el ? (el.textContent || "").trim() : "";
+    return el ? (el.textContent || "").trim().replace(/\s+/g, " ") : "";
+  }
+
+  function firstMatch(selectors) {
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el && (el.textContent || "").trim()) return el;
+    }
+    return null;
+  }
+
+  function mainArea() {
+    return (
+      document.querySelector(".scaffold-layout__main") ||
+      document.querySelector("[role='main']") ||
+      document.querySelector("main") ||
+      document.body
+    );
   }
 
   function extractLinkedIn() {
-    // Job view (e.g. /jobs/view/...) and collections/recommended main detail area
-    const titleEl =
-      document.querySelector(".job-details-jobs-unified-top-card__job-title") ||
-      document.querySelector("[data-tracking-control-name='jobs_show_poster_modal_job_title']") ||
-      document.querySelector(".job-details-jobs-unified-top-card h1") ||
-      document.querySelector(".scaffold-layout__main h1") ||
-      document.querySelector("h1.t-24") ||
-      document.querySelector("h1");
-    const companyEl =
-      document.querySelector(".job-details-jobs-unified-top-card__company-name") ||
-      document.querySelector("[data-tracking-control-name='jobs_show_poster_modal_company_name']") ||
-      document.querySelector(".job-details-jobs-unified-top-card__primary-description a") ||
-      document.querySelector(".jobs-unified-top-card__company-name") ||
-      document.querySelector(".job-details-jobs-unified-top-card a[href*='/company/']");
-    const locationEl =
-      document.querySelector(".job-details-jobs-unified-top-card__bullet") ||
-      document.querySelector(".job-details-jobs-unified-top-card__primary-description-without-tagline") ||
-      document.querySelector(".job-details-jobs-unified-top-card__bullet-item") ||
-      document.querySelector("[data-tracking-control-name='jobs_show_poster_modal_company_name']")?.parentElement;
-    const descEl =
-      document.querySelector(".jobs-description-content__content") ||
-      document.querySelector(".jobs-box__html-content") ||
-      document.querySelector(".jobs-description__content") ||
-      document.querySelector("[data-tracking-control-name='jobs_show_poster_modal_job_description']") ||
-      document.querySelector(".jobs-details__main-content") ||
-      document.querySelector(".jobs-description");
-    const description = getText(descEl) || getText(document.querySelector(".jobs-description"));
-    const jobTitle = getText(titleEl) || "Unknown title";
+    // Title: current + legacy + generic
+    const titleEl = firstMatch([
+      ".job-details-jobs-unified-top-card__job-title h1",
+      ".job-details-jobs-unified-top-card__job-title",
+      ".jobs-unified-top-card__job-title",
+      ".top-card-layout__title",
+      ".jobs-details-top-card__job-title",
+      "[data-tracking-control-name='jobs_show_poster_modal_job_title']",
+      ".job-details-jobs-unified-top-card h1",
+      ".scaffold-layout__main h1",
+      "h1.t-24",
+      "h1",
+    ]);
+    const jobTitleRaw = getText(titleEl);
+    const docTitle = (document.title || "").split(/\s+[|·]\s+/)[0].trim();
+    const jobTitle = jobTitleRaw || docTitle || "Unknown title";
+
+    // Company: known selectors, then any /company/ link inside main area
+    const main = mainArea();
+    let companyEl = firstMatch([
+      ".job-details-jobs-unified-top-card__company-name",
+      ".job-details-jobs-unified-top-card__company-name a",
+      "[data-tracking-control-name='jobs_show_poster_modal_company_name']",
+      ".jobs-unified-top-card__company-name",
+      ".topcard__org-name-link",
+      ".jobs-details-top-card__company-url",
+    ]);
+    if (!companyEl && main) {
+      companyEl = main.querySelector("a[href*='/company/']");
+    }
     const companyName = getText(companyEl) || "Unknown company";
-    const location = getText(locationEl) || "";
+
+    // Description: scope to main, try specific -> fall back to main text
+    let descEl = null;
+    if (main) {
+      descEl =
+        main.querySelector(".jobs-description-content__text") ||
+        main.querySelector(".jobs-description-content__content") ||
+        main.querySelector(".jobs-description__content") ||
+        main.querySelector(".jobs-box__html-content") ||
+        main.querySelector("[class*='jobs-description']") ||
+        main.querySelector("[data-tracking-control-name='jobs_show_poster_modal_job_description']") ||
+        main.querySelector(".description__text") ||
+        main.querySelector("article");
+    }
+    let description = getText(descEl);
+    // Last-resort: dump full main-area text so the LLM has content to analyze.
+    if (description.length < 200 && main) {
+      description = (main.innerText || "").trim().replace(/\s+/g, " ").slice(0, 20000);
+    }
     const bodyText = description;
-    const hasResponsibilities = /responsibilities|duties|what you'll do/i.test(bodyText);
-    const hasRequirements = /requirements|qualifications|must have|experience/i.test(bodyText);
-    const hasBenefits = /benefits|health|401|vacation|remote/i.test(bodyText);
-    const salaryMentioned = /\$|salary|compensation|pay range|k\/yr|per year/i.test(bodyText);
+
+    // Location, posted, applicants — look near the title card
+    const topCard = document.querySelector(".job-details-jobs-unified-top-card") || main;
+    const topCardText = topCard ? (topCard.innerText || "").trim() : "";
+
+    const location =
+      getText(firstMatch([
+        ".job-details-jobs-unified-top-card__bullet",
+        ".job-details-jobs-unified-top-card__primary-description-without-tagline",
+        ".job-details-jobs-unified-top-card__primary-description div",
+        ".topcard__flavor--bullet",
+      ])) ||
+      (topCardText.match(/\b([A-Z][a-zA-Z .'-]+,\s*(?:[A-Z]{2}|[A-Z][a-z]+)(?:,\s*[A-Z][a-z]+)?)\b/) || [])[1] ||
+      "";
+
+    const postedDate =
+      getText(firstMatch([
+        ".job-details-jobs-unified-top-card__posted-date",
+        ".posted-time-ago__text",
+      ])) ||
+      (topCardText.match(/(Reposted[^·\n]*|Posted\s+[^·\n]*|\d+\s+(?:hours?|days?|weeks?|months?)\s+ago)/i) || [])[1] ||
+      "";
+
+    const applicantCount =
+      getText(firstMatch([
+        ".job-details-jobs-unified-top-card__applicant-count",
+        ".num-applicants__caption",
+      ])) ||
+      (topCardText.match(/(\d[\d,]*\+?\s*(?:applicants?|people\s+clicked\s+apply))/i) || [])[1] ||
+      "";
+
+    // Employment type + salary pills
+    const pillsText = topCardText;
+    const employmentType =
+      (pillsText.match(/\b(Full[- ]time|Part[- ]time|Contract|Temporary|Internship)\b/i) || [])[1] || "";
+    const salaryTopCard = /\$\s?\d|\bper\s+(year|hour)\b|\bk\/yr\b|\$\d+[\d,]*(?:\s*[-–]\s*\$\d+[\d,]*)?/i.test(pillsText);
+
+    const salaryMentioned = salaryTopCard || /\$|salary|compensation|pay range|k\/yr|per year/i.test(bodyText);
+    const hasResponsibilities = /responsibilities|duties|what you'?ll do|your role/i.test(bodyText);
+    const hasRequirements = /requirements|qualifications|must[- ]have|experience|what you'?ll bring|you\s+have/i.test(bodyText);
+    const hasBenefits = /benefits|health|401\(?k\)?|vacation|remote|insurance|paid time off/i.test(bodyText);
+
     const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
     const contactInfo = emailMatch ? emailMatch[0] : null;
-    const recruiterEl = document.querySelector(".job-details-jobs-unified-top-card__poster-name") ||
-      document.querySelector("[data-tracking-control-name='jobs_show_poster_modal_poster_name']");
+
+    const recruiterEl = firstMatch([
+      ".job-details-jobs-unified-top-card__poster-name",
+      "[data-tracking-control-name='jobs_show_poster_modal_poster_name']",
+      ".hirer-card__hirer-information a",
+    ]);
     const recruiterVisible = getText(recruiterEl) || null;
-    const applicantEl = document.querySelector(".job-details-jobs-unified-top-card__applicant-count");
-    const applicantCount = getText(applicantEl) || "";
-    const postedEl = document.querySelector(".job-details-jobs-unified-top-card__posted-date");
-    const postedDate = getText(postedEl) || "";
-    const employmentType = "";
 
     return {
       jobTitle,
