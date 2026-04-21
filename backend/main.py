@@ -99,19 +99,48 @@ def _extract_domain_from_email(text: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+def _looks_unknown(value: str | None) -> bool:
+    """Heuristic: the extension sends blank or 'Unknown (extract ...)' when scraping failed."""
+    if not value:
+        return True
+    v = value.strip().lower()
+    return v.startswith("unknown") or len(v) < 2
+
+
 @app.post("/scan", response_model=ScanResponse, dependencies=[Depends(require_token)])
 def scan(body: ScanRequest):
-    """Analyze a job listing with SearXNG + Ollama; fallback to mock if Ollama unavailable."""
+    """Analyze a job listing with search + LLM; LLM also extracts title/company when the
+    extension couldn't scrape them, so the deep-dive investigates the right company."""
     _evict_expired()
     scan_id = str(uuid.uuid4())
-    description_length = body.descriptionLength or (len(body.description or ""))
+    description = body.description or ""
+    description_length = body.descriptionLength or len(description)
+
+    # If the extension couldn't get title/company, do a fast LLM pre-extraction
+    # so the deep-dive search runs on the real company name.
+    resolved_title = body.jobTitle
+    resolved_company = body.companyName
+    resolved_location = body.location
+    resolved_employment = body.employmentType
+    if _looks_unknown(resolved_company) or _looks_unknown(resolved_title):
+        pre = ollama_service.preextract_fields(description)
+        if pre:
+            if _looks_unknown(resolved_title) and pre.get("jobTitle"):
+                resolved_title = pre["jobTitle"]
+            if _looks_unknown(resolved_company) and pre.get("companyName"):
+                resolved_company = pre["companyName"]
+            if not resolved_location and pre.get("location"):
+                resolved_location = pre["location"]
+            if not resolved_employment and pre.get("employmentType"):
+                resolved_employment = pre["employmentType"]
+
     snapshot = ListingSnapshot(
-        jobTitle=body.jobTitle,
-        companyName=body.companyName,
+        jobTitle=resolved_title or "Unknown title",
+        companyName=resolved_company or "Unknown company",
         platform=body.platform,
         pageUrl=body.pageUrl,
-        location=body.location,
-        employmentType=body.employmentType,
+        location=resolved_location,
+        employmentType=resolved_employment,
         postedDate=body.postedDate,
         applicantCount=body.applicantCount,
         salaryMentioned=body.salaryMentioned,
@@ -124,15 +153,20 @@ def scan(body: ScanRequest):
     )
     snapshot_dict = snapshot.model_dump()
     search_evidence = searxng_service.gather_evidence(
-        body.companyName,
+        resolved_company or body.companyName,
         domain=_extract_domain_from_email(body.contactInfo),
     )
-    analysis = ollama_service.analyze(
-        snapshot_dict,
-        body.description or "",
-        search_evidence,
-    )
+    analysis = ollama_service.analyze(snapshot_dict, description, search_evidence)
     if analysis:
+        # Prefer LLM-extracted fields if they look better than what we had.
+        if analysis.get("extractedJobTitle") and (_looks_unknown(snapshot.jobTitle) or not snapshot.jobTitle):
+            snapshot = snapshot.model_copy(update={"jobTitle": analysis["extractedJobTitle"]})
+        if analysis.get("extractedCompanyName") and (_looks_unknown(snapshot.companyName) or not snapshot.companyName):
+            snapshot = snapshot.model_copy(update={"companyName": analysis["extractedCompanyName"]})
+        if analysis.get("extractedLocation") and not snapshot.location:
+            snapshot = snapshot.model_copy(update={"location": analysis["extractedLocation"]})
+        if analysis.get("extractedEmploymentType") and not snapshot.employmentType:
+            snapshot = snapshot.model_copy(update={"employmentType": analysis["extractedEmploymentType"]})
         result = ScanResult(
             id=scan_id,
             timestamp=datetime.utcnow(),

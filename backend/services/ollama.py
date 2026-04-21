@@ -11,11 +11,18 @@ from schemas import CompanySignal, JobPostSignal
 def _build_prompt(snapshot: dict, description: str, search_evidence: str) -> str:
     return f"""You are a job listing fraud analyst protecting a jobseeker from ghost jobs, scams, and untrustworthy employers. You have been given a job posting plus a deep-dive web investigation of the company across multiple axes (legitimacy, fraud reports, reviews, legal actions, layoffs, data-privacy practices).
 
+IMPORTANT: The "Title" and "Company" fields in the metadata below may be missing or say "Unknown (extract from description)" — this means the browser extension could not scrape them. In that case, YOU must extract the real jobTitle and companyName from the job description text, and include them as "extractedJobTitle" and "extractedCompanyName" at the top level of your JSON response. Also extract location, salary range, and employment type into "extractedLocation", "extractedSalary", "extractedEmploymentType" when present in the description. If a field is genuinely unavailable, use an empty string.
+
 Analyze ALL of this evidence carefully. For companySignals, create one signal for EACH of the evidence axes present in the external evidence — use the section headers ("Legitimacy & basic existence", "Fraud, scam, and ghost-job signals", "Employee & customer reviews", "Lawsuits, court cases, regulatory action", "Layoffs and financial health", "Data handling & privacy policy (do they sell your data?)") to guide you. If an axis has no evidence, mark it "warn" with evidence noting the gap. If an axis has positive evidence (e.g., company is in SEC filings, clear privacy policy that doesn't sell data), mark it "good". If concerning (scam reports, lawsuits, mass layoffs, data sold to third parties), mark it "bad".
 
 Output only valid JSON (no markdown, no extra text) with this exact structure:
 
 {{
+  "extractedJobTitle": "<real title from description>",
+  "extractedCompanyName": "<real company from description>",
+  "extractedLocation": "<location or empty>",
+  "extractedSalary": "<salary range or empty>",
+  "extractedEmploymentType": "<Full-time/Part-time/Contract or empty>",
   "trustScore": <0-100 integer: how trustworthy is this listing + company>,
   "riskLevel": "low" | "medium" | "high",
   "primaryWarning": "<one sentence summary for the user — lead with the biggest concern or biggest green flag>",
@@ -28,10 +35,11 @@ Output only valid JSON (no markdown, no extra text) with this exact structure:
 }}
 
 Rules:
+- Always perform the extraction above, even if the original Title/Company were provided (validate them against the description).
 - jobPostSignals: 5-8 signals about the listing itself (salary presence, description quality, urgency language, contact legitimacy, etc.)
 - companySignals: 6 signals, one per investigation axis above, using the external evidence directly.
 - Evidence strings must reference what you actually observed — never fabricate.
-- If companyName is "Unknown company" or the listing has almost no content, set trustScore low and flag the extraction failure clearly.
+- Base your analysis on the ACTUAL description content, not the possibly-stale Title/Company metadata.
 
 Job listing metadata:
 - Title: {snapshot.get('jobTitle', '')}
@@ -162,6 +170,45 @@ def _normalize(parsed: dict) -> dict:
         "primaryWarning": parsed.get("primaryWarning") or "Analysis complete.",
         "jobPostSignals": job_signals,
         "companySignals": company_signals,
+        "extractedJobTitle": (parsed.get("extractedJobTitle") or "").strip(),
+        "extractedCompanyName": (parsed.get("extractedCompanyName") or "").strip(),
+        "extractedLocation": (parsed.get("extractedLocation") or "").strip(),
+        "extractedSalary": (parsed.get("extractedSalary") or "").strip(),
+        "extractedEmploymentType": (parsed.get("extractedEmploymentType") or "").strip(),
+    }
+
+
+def preextract_fields(description: str) -> dict | None:
+    """Fast LLM call to pull job title / company / location from raw description.
+
+    Used when the browser extension couldn't scrape them, so we have a real
+    company name to feed the deep-dive search BEFORE the main analysis call.
+    """
+    if not description or len(description) < 50:
+        return None
+    prompt = (
+        "Extract the following fields from this job listing text. "
+        "Output ONLY valid JSON, no markdown. Use empty strings when unclear.\n\n"
+        "Required fields:\n"
+        "  jobTitle, companyName, location, salary, employmentType\n\n"
+        "Listing text:\n" + description[:6000]
+    )
+    config = get_config()
+    if config.get("groq_api_key"):
+        raw = _call_groq(prompt, config["groq_api_key"], config["groq_model"])
+    else:
+        raw = _call_ollama(prompt, config["ollama_url"], config["ollama_model"])
+    if not raw:
+        return None
+    parsed = _parse_json(raw)
+    if not parsed or not isinstance(parsed, dict):
+        return None
+    return {
+        "jobTitle": (parsed.get("jobTitle") or "").strip(),
+        "companyName": (parsed.get("companyName") or "").strip(),
+        "location": (parsed.get("location") or "").strip(),
+        "salary": (parsed.get("salary") or "").strip(),
+        "employmentType": (parsed.get("employmentType") or "").strip(),
     }
 
 

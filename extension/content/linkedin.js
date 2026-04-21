@@ -54,8 +54,17 @@
     ];
     const titleEl = firstMatch(titleSelectors, main) || firstMatch(titleSelectors);
     const jobTitleRaw = getText(titleEl);
-    const docTitle = (document.title || "").split(/\s+[|·]\s+/)[0].trim();
-    const jobTitle = jobTitleRaw || docTitle || "Unknown title";
+    // Strip LinkedIn's "(N) " unread prefix and " | LinkedIn" suffix, then reject
+    // known navigation headers so we don't send "Top job picks for you" as a job title.
+    const docTitleClean = (document.title || "")
+      .replace(/^\(\d+\)\s*/, "")
+      .replace(/\s+[|·]\s+LinkedIn.*$/i, "")
+      .trim();
+    const sectionHeaderRe = /^(top job picks|recommended for you|saved jobs|applied jobs|my jobs|jobs home|job search|jobs)\b/i;
+    const candidates = [jobTitleRaw, docTitleClean].filter(
+      (t) => t && !sectionHeaderRe.test(t)
+    );
+    const jobTitle = candidates[0] || "";
 
     // Company: scope to detail pane first so we don't grab a company from the list card.
     const companySelectors = [
@@ -71,26 +80,14 @@
     if (!companyEl && main) {
       companyEl = main.querySelector("a[href*='/company/']");
     }
-    const companyName = getText(companyEl) || "Unknown company";
+    const companyName = getText(companyEl) || "";
 
-    // Description: scope to main, try specific -> fall back to main text
-    let descEl = null;
-    if (main) {
-      descEl =
-        main.querySelector(".jobs-description-content__text") ||
-        main.querySelector(".jobs-description-content__content") ||
-        main.querySelector(".jobs-description__content") ||
-        main.querySelector(".jobs-box__html-content") ||
-        main.querySelector("[class*='jobs-description']") ||
-        main.querySelector("[data-tracking-control-name='jobs_show_poster_modal_job_description']") ||
-        main.querySelector(".description__text") ||
-        main.querySelector("article");
-    }
-    let description = getText(descEl);
-    // Last-resort: dump full main-area text so the LLM has content to analyze.
-    if (description.length < 200 && main) {
-      description = (main.innerText || "").trim().replace(/\s+/g, " ").slice(0, 20000);
-    }
+    // Always dump the detail pane's full text so the LLM sees every detail
+    // regardless of LinkedIn's current DOM class names. 20KB is plenty for a
+    // single listing and fits the backend's prompt budget.
+    const description = main
+      ? (main.innerText || "").trim().replace(/\s+/g, " ").slice(0, 20000)
+      : "";
     const bodyText = description;
 
     // Location, posted, applicants — look near the title card

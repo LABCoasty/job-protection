@@ -133,8 +133,15 @@ function extractInPage() {
     : firstMatch(idTitleSel, main) || firstMatch(idTitleSel);
 
   const jobTitleRaw = getText(titleEl);
-  const docTitle = (document.title || "").split(/\s+[|·]\s+/)[0].trim();
-  const jobTitle = jobTitleRaw || docTitle || "Unknown title";
+  const docTitleClean = (document.title || "")
+    .replace(/^\(\d+\)\s*/, "")
+    .replace(/\s+[|·]\s+(LinkedIn|Indeed).*$/i, "")
+    .trim();
+  const sectionHeaderRe = /^(top job picks|recommended for you|saved jobs|applied jobs|my jobs|jobs home|job search|jobs)\b/i;
+  const titleCandidates = [jobTitleRaw, docTitleClean].filter(
+    (t) => t && !sectionHeaderRe.test(t)
+  );
+  const jobTitle = titleCandidates[0] || "";
 
   const liCompanySel = [
     ".job-details-jobs-unified-top-card__company-name",
@@ -154,25 +161,13 @@ function extractInPage() {
   if (!companyEl && main && isLinkedIn) {
     companyEl = main.querySelector("a[href*='/company/']");
   }
-  const companyName = getText(companyEl) || "Unknown company";
+  const companyName = getText(companyEl) || "";
 
-  let descEl = null;
-  if (main) {
-    descEl = isLinkedIn
-      ? main.querySelector(".jobs-description-content__text") ||
-        main.querySelector(".jobs-description-content__content") ||
-        main.querySelector(".jobs-description__content") ||
-        main.querySelector(".jobs-box__html-content") ||
-        main.querySelector("[class*='jobs-description']") ||
-        main.querySelector("article")
-      : main.querySelector("#jobDescriptionText") ||
-        main.querySelector(".jobsearch-JobComponent-description") ||
-        main.querySelector("[data-testid='job-description']");
-  }
-  let description = getText(descEl);
-  if (description.length < 200 && main) {
-    description = (main.innerText || "").trim().replace(/\s+/g, " ").slice(0, 20000);
-  }
+  // Always capture the detail pane's full text so the LLM sees everything,
+  // regardless of which LinkedIn/Indeed DOM class names are in play today.
+  const description = main
+    ? (main.innerText || "").trim().replace(/\s+/g, " ").slice(0, 20000)
+    : "";
   const bodyText = description;
 
   const topCard =

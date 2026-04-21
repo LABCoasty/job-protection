@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { FileSpreadsheet, Check, ChevronDown, Link2, Unlink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -13,9 +13,47 @@ interface ExportScreenProps {
 
 export function ExportScreen({ onBack }: ExportScreenProps) {
   const [isConnected, setIsConnected] = useState(false)
+  const [connectedEmail, setConnectedEmail] = useState<string | null>(null)
   const [autoExport, setAutoExport] = useState(false)
   const [selectedSheet, setSelectedSheet] = useState("")
   const [selectedTab, setSelectedTab] = useState("")
+
+  // Ask the parent (extension side panel) for the current Google Sheets connection
+  // state on mount. The parent handles chrome.identity since iframes can't.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const listener = (event: MessageEvent) => {
+      const data = event.data
+      if (!data || data.type !== "JOBGUARD_GOOGLE_STATUS") return
+      setIsConnected(Boolean(data.connected))
+      setConnectedEmail(data.email || null)
+      setAutoExport(Boolean(data.autoLog))
+    }
+    window.addEventListener("message", listener)
+    try {
+      window.parent?.postMessage({ type: "JOBGUARD_GET_GOOGLE_STATUS" }, "*")
+    } catch {}
+    return () => window.removeEventListener("message", listener)
+  }, [])
+
+  function requestConnect() {
+    try {
+      window.parent?.postMessage({ type: "JOBGUARD_CONNECT_GOOGLE" }, "*")
+    } catch {}
+  }
+
+  function requestDisconnect() {
+    try {
+      window.parent?.postMessage({ type: "JOBGUARD_DISCONNECT_GOOGLE" }, "*")
+    } catch {}
+  }
+
+  function requestToggleAutoLog(next: boolean) {
+    setAutoExport(next)
+    try {
+      window.parent?.postMessage({ type: "JOBGUARD_SET_AUTOLOG", value: next }, "*")
+    } catch {}
+  }
 
   return (
     <div className="min-h-[calc(100vh-60px)]">
@@ -47,14 +85,16 @@ export function ExportScreen({ onBack }: ExportScreenProps) {
                   {isConnected ? "Connected to Google" : "Not connected"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {isConnected ? "your.email@gmail.com" : "Connect to export scan data"}
+                  {isConnected
+                    ? connectedEmail || "Signed in via extension"
+                    : "Connect to export scan data"}
                 </p>
               </div>
             </div>
             <Button
               variant={isConnected ? "outline" : "default"}
               size="sm"
-              onClick={() => setIsConnected(!isConnected)}
+              onClick={isConnected ? requestDisconnect : requestConnect}
             >
               {isConnected ? "Disconnect" : "Connect Google"}
             </Button>
@@ -75,7 +115,7 @@ export function ExportScreen({ onBack }: ExportScreenProps) {
             <Switch
               id="auto-export"
               checked={autoExport}
-              onCheckedChange={setAutoExport}
+              onCheckedChange={requestToggleAutoLog}
               disabled={!isConnected}
             />
           </div>
