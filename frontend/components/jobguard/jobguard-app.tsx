@@ -10,7 +10,7 @@ import { ExportScreen } from "./export-screen"
 import { AboutScreen } from "./about-screen"
 import type { Screen, ScanResult, ScanHistoryItem } from "@/lib/jobguard-types"
 import type { ScanRequestPayload } from "@/lib/api"
-import { getScan, getHistory } from "@/lib/api"
+import { getScan, getHistory, setAccessToken } from "@/lib/api"
 
 export function JobGuardApp() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("home")
@@ -18,6 +18,22 @@ export function JobGuardApp() {
   const [pendingScanPayload, setPendingScanPayload] = useState<ScanRequestPayload | null>(null)
   const [history, setHistory] = useState<ScanHistoryItem[]>([])
   const [detectedPlatform] = useState<string | null>("LinkedIn")
+  const [hasToken, setHasToken] = useState<boolean>(true)
+
+  // Extract access token from ?t=... on mount and seed the api client.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get("t")
+    if (token) {
+      setAccessToken(token)
+      setHasToken(true)
+    } else {
+      // Only enforce token presence when an API URL is configured (i.e., prod).
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL
+      setHasToken(!apiUrl || apiUrl.includes("localhost"))
+    }
+  }, [])
 
   // Load history from API on mount and when returning to history
   useEffect(() => {
@@ -41,6 +57,21 @@ export function JobGuardApp() {
         // Leave on home or show error toast
       })
   }, [])
+
+  if (!hasToken) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-4">
+          <h1 className="text-2xl font-semibold">Access restricted</h1>
+          <p className="text-muted-foreground">
+            JobGuard reports are only viewable through the JobGuard Chrome extension.
+            Install the extension, configure your access token in its options, and open a
+            scan from there.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const handleNavigate = useCallback((screen: Screen) => {
     setCurrentScreen(screen)

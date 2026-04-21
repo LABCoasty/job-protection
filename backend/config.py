@@ -21,4 +21,8 @@ def get_config():
         # Persistence + cache
         "database_url": os.getenv("DATABASE_URL"),  # optional
         "scan_cache_ttl_seconds": int(os.getenv("SCAN_CACHE_TTL_SECONDS", "3600")),
+        # Access control — when set, all endpoints except /health require
+        # a matching X-API-Token header. Intended so only the Chrome extension
+        # (which injects the token) can talk to the backend.
+        "api_token": os.getenv("API_TOKEN"),
     }

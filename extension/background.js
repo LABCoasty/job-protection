@@ -41,11 +41,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   (async () => {
     try {
-      const { backendUrl } = await chrome.storage.sync.get(["backendUrl"]);
+      const { backendUrl, apiToken } = await chrome.storage.sync.get(["backendUrl", "apiToken"]);
       const backend = backendUrl || BACKEND_URL;
+      const headers = { "Content-Type": "application/json" };
+      if (apiToken) headers["X-API-Token"] = apiToken;
       const res = await fetch(`${backend}/scan`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
       if (!res.ok) {

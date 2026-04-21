@@ -153,6 +153,17 @@
     </div>
 
     <div class="section">
+      <h2>Access token</h2>
+      <div class="row">
+        <div style="flex: 1;">
+          <input id="api-token" type="password" style="width: 100%; padding: 8px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;" placeholder="Paste your API_TOKEN from Render">
+          <div class="muted" style="margin-top: 6px;">Shared secret that gates the backend + report UI. Leave blank to skip auth (local dev only).</div>
+        </div>
+        <button id="btn-save-token" class="btn btn-outline">Save</button>
+      </div>
+    </div>
+
+    <div class="section">
       <h2>About</h2>
       <div class="muted">
         JobGuard is a research tool. It verifies job listings before you apply and exports scan history to your Google Sheet. Sheets OAuth runs entirely in-browser — no credentials leave your machine.

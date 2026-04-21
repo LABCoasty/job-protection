@@ -5,6 +5,23 @@ const getBaseUrl = () =>
     ? process.env.NEXT_PUBLIC_API_URL
     : "http://localhost:8000"
 
+// Module-level storage for the access token extracted from ?t= on page load.
+let _accessToken: string | null = null
+
+export function setAccessToken(token: string | null) {
+  _accessToken = token && token.length > 0 ? token : null
+}
+
+export function getAccessToken(): string | null {
+  return _accessToken
+}
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extra }
+  if (_accessToken) headers["X-API-Token"] = _accessToken
+  return headers
+}
+
 export type ScanRequestPayload = ListingSnapshot & { description?: string | null }
 
 export type ScanResponse = { scanId: string; result: ScanResult }
@@ -12,7 +29,7 @@ export type ScanResponse = { scanId: string; result: ScanResult }
 export async function postScan(payload: ScanRequestPayload): Promise<ScanResponse> {
   const res = await fetch(`${getBaseUrl()}/scan`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
@@ -27,7 +44,9 @@ export async function postScan(payload: ScanRequestPayload): Promise<ScanRespons
 }
 
 export async function getScan(scanId: string): Promise<ScanResult> {
-  const res = await fetch(`${getBaseUrl()}/scan/${encodeURIComponent(scanId)}`)
+  const res = await fetch(`${getBaseUrl()}/scan/${encodeURIComponent(scanId)}`, {
+    headers: authHeaders(),
+  })
   if (!res.ok) {
     if (res.status === 404) throw new Error("Scan not found")
     const text = await res.text()
@@ -39,7 +58,7 @@ export async function getScan(scanId: string): Promise<ScanResult> {
 }
 
 export async function getHistory(): Promise<ScanHistoryItem[]> {
-  const res = await fetch(`${getBaseUrl()}/history`)
+  const res = await fetch(`${getBaseUrl()}/history`, { headers: authHeaders() })
   if (!res.ok) {
     return []
   }

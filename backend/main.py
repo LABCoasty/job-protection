@@ -5,7 +5,9 @@ import time
 import uuid
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+import secrets
+
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_config
@@ -31,6 +33,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def require_token(x_api_token: str | None = Header(default=None)) -> None:
+    """Gate: if API_TOKEN env is set, require a matching X-API-Token header.
+    Uses constant-time compare to avoid timing leaks."""
+    expected = get_config().get("api_token")
+    if not expected:
+        return  # Auth disabled (local dev).
+    provided = x_api_token or ""
+    if not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing API token")
 
 # In-memory cache: scan_id -> (ScanResult, expiry_timestamp)
 _scan_cache: dict[str, tuple[ScanResult, float]] = {}
@@ -86,7 +99,7 @@ def _extract_domain_from_email(text: str | None) -> str | None:
     return m.group(1) if m else None
 
 
-@app.post("/scan", response_model=ScanResponse)
+@app.post("/scan", response_model=ScanResponse, dependencies=[Depends(require_token)])
 def scan(body: ScanRequest):
     """Analyze a job listing with SearXNG + Ollama; fallback to mock if Ollama unavailable."""
     _evict_expired()
@@ -139,7 +152,7 @@ def scan(body: ScanRequest):
     return ScanResponse(scanId=scan_id, result=result)
 
 
-@app.get("/scan/{scan_id}", response_model=ScanResult)
+@app.get("/scan/{scan_id}", response_model=ScanResult, dependencies=[Depends(require_token)])
 def get_scan(scan_id: str):
     """Return a previously stored scan result by id (for extension handoff)."""
     _evict_expired()
@@ -152,7 +165,7 @@ def get_scan(scan_id: str):
     raise HTTPException(status_code=404, detail="Scan not found")
 
 
-@app.get("/history", response_model=list[ScanHistoryItem])
+@app.get("/history", response_model=list[ScanHistoryItem], dependencies=[Depends(require_token)])
 def history(limit: int = 50):
     """Return recent scan history (from DB if configured, else empty)."""
     return db_list_recent(limit=limit)

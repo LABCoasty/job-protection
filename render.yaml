@@ -26,5 +26,7 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: API_TOKEN
+        generateValue: true
       - key: SCAN_CACHE_TTL_SECONDS
         value: "3600"

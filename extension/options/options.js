@@ -12,6 +12,8 @@ const backendInput = el("backend-url");
 const btnSaveBackend = el("btn-save-backend");
 const frontendInput = el("frontend-url");
 const btnSaveFrontend = el("btn-save-frontend");
+const tokenInput = el("api-token");
+const btnSaveToken = el("btn-save-token");
 const toast = el("toast");
 
 function showToast(text, { error = false } = {}) {
@@ -86,6 +88,11 @@ async function loadFrontend() {
   frontendInput.value = frontendUrl || "http://localhost:3000";
 }
 
+async function loadToken() {
+  const { apiToken } = await chrome.storage.sync.get(["apiToken"]);
+  tokenInput.value = apiToken || "";
+}
+
 btnSaveBackend.addEventListener("click", async () => {
   const value = backendInput.value.trim() || "http://localhost:8000";
   await chrome.storage.sync.set({ backendUrl: value });
@@ -98,6 +105,13 @@ btnSaveFrontend.addEventListener("click", async () => {
   showToast("Frontend URL saved");
 });
 
+btnSaveToken.addEventListener("click", async () => {
+  const value = tokenInput.value.trim();
+  await chrome.storage.sync.set({ apiToken: value });
+  showToast(value ? "Access token saved" : "Access token cleared");
+});
+
 refreshStatus();
 loadBackend();
 loadFrontend();
+loadToken();

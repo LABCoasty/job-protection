@@ -1,10 +1,12 @@
 const DEFAULT_FRONTEND_URL = "http://localhost:3000";
 
 async function showReport(scanId) {
-  const { frontendUrl } = await chrome.storage.sync.get(["frontendUrl"]);
+  const { frontendUrl, apiToken } = await chrome.storage.sync.get(["frontendUrl", "apiToken"]);
   const base = frontendUrl || DEFAULT_FRONTEND_URL;
+  const params = new URLSearchParams({ scanId });
+  if (apiToken) params.set("t", apiToken);
   const iframe = document.getElementById("report-frame");
-  iframe.src = `${base}/?scanId=${encodeURIComponent(scanId)}`;
+  iframe.src = `${base}/?${params.toString()}`;
   document.body.classList.add("report");
 }
 
