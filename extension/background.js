@@ -77,61 +77,167 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 function extractInPage() {
   function getText(el) {
-    return el ? (el.textContent || "").trim() : "";
+    return el ? (el.textContent || "").trim().replace(/\s+/g, " ") : "";
   }
+  function firstMatch(selectors) {
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el && (el.textContent || "").trim()) return el;
+    }
+    return null;
+  }
+  function mainArea() {
+    return (
+      document.querySelector(".scaffold-layout__main") ||
+      document.querySelector("[role='main']") ||
+      document.querySelector("main") ||
+      document.body
+    );
+  }
+
   const u = window.location.href;
-  if (u.includes("indeed.com")) {
-    const titleEl = document.querySelector("[data-testid='jobsearch-JobInfoHeader-title']") || document.querySelector(".jobsearch-JobInfoHeader-title") || document.querySelector("h1");
-    const companyEl = document.querySelector("[data-testid='inlineHeader-companyName']") || document.querySelector(".jobsearch-InlineCompanyRating-companyHeader a") || document.querySelector(".jobsearch-CompanyInfoContainer a");
-    const locationEl = document.querySelector("[data-testid='job-location']") || document.querySelector(".jobsearch-JobInfoHeader-subtitle div");
-    const descEl = document.querySelector("#jobDescriptionText") || document.querySelector(".jobsearch-JobComponent-description") || document.querySelector("[data-testid='job-description']");
-    const description = getText(descEl);
-    const bodyText = description;
-    return {
-      jobTitle: getText(titleEl) || "Unknown title",
-      companyName: getText(companyEl) || "Unknown company",
-      platform: "Indeed",
-      pageUrl: u,
-      location: getText(locationEl) || "",
-      employmentType: getText(document.querySelector("[data-testid='attributes-layout']")) || "",
-      postedDate: getText(document.querySelector("[data-testid='job-date']")) || "",
-      applicantCount: getText(document.querySelector(".jobsearch-JobMetadataFooter-item")) || "",
-      salaryMentioned: /\$|salary|compensation|pay range|k\/yr|per year/i.test(bodyText),
-      responsibilitiesPresent: /responsibilities|duties|what you'll do/i.test(bodyText),
-      requirementsPresent: /requirements|qualifications|must have|experience/i.test(bodyText),
-      benefitsPresent: /benefits|health|401|vacation|remote/i.test(bodyText),
-      contactInfo: (bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/) || [])[0] || null,
-      recruiterVisible: null,
-      descriptionLength: bodyText.length,
-      description: bodyText.slice(0, 50000),
-    };
+  const isLinkedIn = u.includes("linkedin.com");
+  const isIndeed = u.includes("indeed.com");
+  if (!isLinkedIn && !isIndeed) return null;
+
+  const main = mainArea();
+
+  const titleEl = isLinkedIn
+    ? firstMatch([
+        ".job-details-jobs-unified-top-card__job-title h1",
+        ".job-details-jobs-unified-top-card__job-title",
+        ".jobs-unified-top-card__job-title",
+        ".top-card-layout__title",
+        "h1.t-24",
+        "h1",
+      ])
+    : firstMatch([
+        "[data-testid='jobsearch-JobInfoHeader-title']",
+        ".jobsearch-JobInfoHeader-title",
+        "h1",
+      ]);
+
+  const jobTitleRaw = getText(titleEl);
+  const docTitle = (document.title || "").split(/\s+[|·]\s+/)[0].trim();
+  const jobTitle = jobTitleRaw || docTitle || "Unknown title";
+
+  let companyEl = firstMatch(
+    isLinkedIn
+      ? [
+          ".job-details-jobs-unified-top-card__company-name",
+          ".job-details-jobs-unified-top-card__company-name a",
+          ".jobs-unified-top-card__company-name",
+          ".topcard__org-name-link",
+        ]
+      : [
+          "[data-testid='inlineHeader-companyName']",
+          ".jobsearch-InlineCompanyRating-companyHeader a",
+          ".jobsearch-CompanyInfoContainer a",
+        ]
+  );
+  if (!companyEl && main && isLinkedIn) {
+    companyEl = main.querySelector("a[href*='/company/']");
   }
-  if (u.includes("linkedin.com/jobs")) {
-    const titleEl = document.querySelector(".job-details-jobs-unified-top-card__job-title") || document.querySelector(".job-details-jobs-unified-top-card h1") || document.querySelector(".scaffold-layout__main h1") || document.querySelector("h1");
-    const companyEl = document.querySelector(".job-details-jobs-unified-top-card__company-name") || document.querySelector(".job-details-jobs-unified-top-card__primary-description a") || document.querySelector(".job-details-jobs-unified-top-card a[href*='/company/']");
-    const locationEl = document.querySelector(".job-details-jobs-unified-top-card__bullet") || document.querySelector(".job-details-jobs-unified-top-card__primary-description-without-tagline") || document.querySelector(".job-details-jobs-unified-top-card__bullet-item");
-    const descEl = document.querySelector(".jobs-description-content__content") || document.querySelector(".jobs-box__html-content") || document.querySelector(".jobs-description__content") || document.querySelector(".jobs-details__main-content") || document.querySelector(".jobs-description");
-    const description = getText(descEl);
-    const bodyText = description;
-    const recruiterEl = document.querySelector(".job-details-jobs-unified-top-card__poster-name");
-    return {
-      jobTitle: getText(titleEl) || "Unknown title",
-      companyName: getText(companyEl) || "Unknown company",
-      platform: "LinkedIn",
-      pageUrl: u,
-      location: getText(locationEl) || "",
-      employmentType: "",
-      postedDate: getText(document.querySelector(".job-details-jobs-unified-top-card__posted-date")) || "",
-      applicantCount: getText(document.querySelector(".job-details-jobs-unified-top-card__applicant-count")) || "",
-      salaryMentioned: /\$|salary|compensation|pay range|k\/yr|per year/i.test(bodyText),
-      responsibilitiesPresent: /responsibilities|duties|what you'll do/i.test(bodyText),
-      requirementsPresent: /requirements|qualifications|must have|experience/i.test(bodyText),
-      benefitsPresent: /benefits|health|401|vacation|remote/i.test(bodyText),
-      contactInfo: (bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/) || [])[0] || null,
-      recruiterVisible: getText(recruiterEl) || null,
-      descriptionLength: bodyText.length,
-      description: bodyText.slice(0, 50000),
-    };
+  const companyName = getText(companyEl) || "Unknown company";
+
+  let descEl = null;
+  if (main) {
+    descEl = isLinkedIn
+      ? main.querySelector(".jobs-description-content__text") ||
+        main.querySelector(".jobs-description-content__content") ||
+        main.querySelector(".jobs-description__content") ||
+        main.querySelector(".jobs-box__html-content") ||
+        main.querySelector("[class*='jobs-description']") ||
+        main.querySelector("article")
+      : main.querySelector("#jobDescriptionText") ||
+        main.querySelector(".jobsearch-JobComponent-description") ||
+        main.querySelector("[data-testid='job-description']");
   }
-  return null;
+  let description = getText(descEl);
+  if (description.length < 200 && main) {
+    description = (main.innerText || "").trim().replace(/\s+/g, " ").slice(0, 20000);
+  }
+  const bodyText = description;
+
+  const topCard =
+    (isLinkedIn && document.querySelector(".job-details-jobs-unified-top-card")) ||
+    main ||
+    document.body;
+  const topCardText = topCard ? (topCard.innerText || "").trim() : "";
+
+  const location =
+    getText(
+      firstMatch(
+        isLinkedIn
+          ? [
+              ".job-details-jobs-unified-top-card__bullet",
+              ".job-details-jobs-unified-top-card__primary-description-without-tagline",
+              ".topcard__flavor--bullet",
+            ]
+          : [
+              "[data-testid='job-location']",
+              ".jobsearch-JobInfoHeader-subtitle div",
+            ]
+      )
+    ) ||
+    (topCardText.match(/\b([A-Z][a-zA-Z .'-]+,\s*(?:[A-Z]{2}|[A-Z][a-z]+))\b/) || [])[1] ||
+    "";
+
+  const postedDate =
+    getText(
+      firstMatch([
+        ".job-details-jobs-unified-top-card__posted-date",
+        ".posted-time-ago__text",
+        "[data-testid='job-date']",
+      ])
+    ) ||
+    (topCardText.match(/(Reposted[^·\n]*|Posted\s+[^·\n]*|\d+\s+(?:hours?|days?|weeks?|months?)\s+ago)/i) || [])[1] ||
+    "";
+
+  const applicantCount =
+    getText(
+      firstMatch([
+        ".job-details-jobs-unified-top-card__applicant-count",
+        ".num-applicants__caption",
+        ".jobsearch-JobMetadataFooter-item",
+      ])
+    ) ||
+    (topCardText.match(/(\d[\d,]*\+?\s*(?:applicants?|people\s+clicked\s+apply))/i) || [])[1] ||
+    "";
+
+  const employmentType =
+    (topCardText.match(/\b(Full[- ]time|Part[- ]time|Contract|Temporary|Internship)\b/i) || [])[1] || "";
+
+  const salaryMentioned =
+    /\$\s?\d|\bper\s+(year|hour)\b|\bk\/yr\b/i.test(topCardText) ||
+    /\$|salary|compensation|pay range|k\/yr|per year/i.test(bodyText);
+  const hasResponsibilities = /responsibilities|duties|what you'?ll do|your role/i.test(bodyText);
+  const hasRequirements = /requirements|qualifications|must[- ]have|experience|what you'?ll bring/i.test(bodyText);
+  const hasBenefits = /benefits|health|401\(?k\)?|vacation|remote|insurance|paid time off/i.test(bodyText);
+
+  const recruiterEl = isLinkedIn
+    ? firstMatch([
+        ".job-details-jobs-unified-top-card__poster-name",
+        ".hirer-card__hirer-information a",
+      ])
+    : null;
+
+  return {
+    jobTitle,
+    companyName,
+    platform: isLinkedIn ? "LinkedIn" : "Indeed",
+    pageUrl: u,
+    location,
+    employmentType,
+    postedDate,
+    applicantCount,
+    salaryMentioned,
+    responsibilitiesPresent: hasResponsibilities,
+    requirementsPresent: hasRequirements,
+    benefitsPresent: hasBenefits,
+    contactInfo: (bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/) || [])[0] || null,
+    recruiterVisible: getText(recruiterEl) || null,
+    descriptionLength: bodyText.length,
+    description: bodyText.slice(0, 50000),
+  };
 }
