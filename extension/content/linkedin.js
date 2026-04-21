@@ -3,16 +3,33 @@
     return el ? (el.textContent || "").trim().replace(/\s+/g, " ") : "";
   }
 
-  function firstMatch(selectors) {
+  function firstMatch(selectors, root) {
+    const scope = root || document;
     for (const sel of selectors) {
-      const el = document.querySelector(sel);
+      const el = scope.querySelector(sel);
       if (el && (el.textContent || "").trim()) return el;
     }
     return null;
   }
 
-  function mainArea() {
+  function detailPane() {
+    // On /jobs/collections/... and /jobs/search/... the detail is in a right pane.
+    // On /jobs/view/<id> the whole page is the detail. Try specific → generic.
     return (
+      document.querySelector(".jobs-details__main-content") ||
+      document.querySelector(".job-view-layout") ||
+      document.querySelector(".jobs-search__job-details--wrapper") ||
+      document.querySelector(".jobs-search__job-details--container") ||
+      document.querySelector(".jobs-search__job-details") ||
+      document.querySelector(".scaffold-layout__detail") ||
+      null
+    );
+  }
+
+  function mainArea() {
+    // Prefer the detail pane. Fall back to main only if no detail pane exists.
+    return (
+      detailPane() ||
       document.querySelector(".scaffold-layout__main") ||
       document.querySelector("[role='main']") ||
       document.querySelector("main") ||
@@ -21,8 +38,10 @@
   }
 
   function extractLinkedIn() {
-    // Title: current + legacy + generic
-    const titleEl = firstMatch([
+    const main = mainArea();
+    // Title: prefer matches inside the detail pane so we don't pick up
+    // section headers like "Top job picks for you".
+    const titleSelectors = [
       ".job-details-jobs-unified-top-card__job-title h1",
       ".job-details-jobs-unified-top-card__job-title",
       ".jobs-unified-top-card__job-title",
@@ -30,24 +49,25 @@
       ".jobs-details-top-card__job-title",
       "[data-tracking-control-name='jobs_show_poster_modal_job_title']",
       ".job-details-jobs-unified-top-card h1",
-      ".scaffold-layout__main h1",
       "h1.t-24",
       "h1",
-    ]);
+    ];
+    const titleEl = firstMatch(titleSelectors, main) || firstMatch(titleSelectors);
     const jobTitleRaw = getText(titleEl);
     const docTitle = (document.title || "").split(/\s+[|·]\s+/)[0].trim();
     const jobTitle = jobTitleRaw || docTitle || "Unknown title";
 
-    // Company: known selectors, then any /company/ link inside main area
-    const main = mainArea();
-    let companyEl = firstMatch([
+    // Company: scope to detail pane first so we don't grab a company from the list card.
+    const companySelectors = [
       ".job-details-jobs-unified-top-card__company-name",
       ".job-details-jobs-unified-top-card__company-name a",
       "[data-tracking-control-name='jobs_show_poster_modal_company_name']",
       ".jobs-unified-top-card__company-name",
       ".topcard__org-name-link",
       ".jobs-details-top-card__company-url",
-    ]);
+      "a[href*='/company/']",
+    ];
+    let companyEl = firstMatch(companySelectors, main) || firstMatch(companySelectors);
     if (!companyEl && main) {
       companyEl = main.querySelector("a[href*='/company/']");
     }

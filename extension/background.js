@@ -79,15 +79,28 @@ function extractInPage() {
   function getText(el) {
     return el ? (el.textContent || "").trim().replace(/\s+/g, " ") : "";
   }
-  function firstMatch(selectors) {
+  function firstMatch(selectors, root) {
+    const scope = root || document;
     for (const sel of selectors) {
-      const el = document.querySelector(sel);
+      const el = scope.querySelector(sel);
       if (el && (el.textContent || "").trim()) return el;
     }
     return null;
   }
+  function detailPane() {
+    return (
+      document.querySelector(".jobs-details__main-content") ||
+      document.querySelector(".job-view-layout") ||
+      document.querySelector(".jobs-search__job-details--wrapper") ||
+      document.querySelector(".jobs-search__job-details--container") ||
+      document.querySelector(".jobs-search__job-details") ||
+      document.querySelector(".scaffold-layout__detail") ||
+      null
+    );
+  }
   function mainArea() {
     return (
+      detailPane() ||
       document.querySelector(".scaffold-layout__main") ||
       document.querySelector("[role='main']") ||
       document.querySelector("main") ||
@@ -102,39 +115,42 @@ function extractInPage() {
 
   const main = mainArea();
 
+  const liTitleSel = [
+    ".job-details-jobs-unified-top-card__job-title h1",
+    ".job-details-jobs-unified-top-card__job-title",
+    ".jobs-unified-top-card__job-title",
+    ".top-card-layout__title",
+    "h1.t-24",
+    "h1",
+  ];
+  const idTitleSel = [
+    "[data-testid='jobsearch-JobInfoHeader-title']",
+    ".jobsearch-JobInfoHeader-title",
+    "h1",
+  ];
   const titleEl = isLinkedIn
-    ? firstMatch([
-        ".job-details-jobs-unified-top-card__job-title h1",
-        ".job-details-jobs-unified-top-card__job-title",
-        ".jobs-unified-top-card__job-title",
-        ".top-card-layout__title",
-        "h1.t-24",
-        "h1",
-      ])
-    : firstMatch([
-        "[data-testid='jobsearch-JobInfoHeader-title']",
-        ".jobsearch-JobInfoHeader-title",
-        "h1",
-      ]);
+    ? firstMatch(liTitleSel, main) || firstMatch(liTitleSel)
+    : firstMatch(idTitleSel, main) || firstMatch(idTitleSel);
 
   const jobTitleRaw = getText(titleEl);
   const docTitle = (document.title || "").split(/\s+[|·]\s+/)[0].trim();
   const jobTitle = jobTitleRaw || docTitle || "Unknown title";
 
-  let companyEl = firstMatch(
-    isLinkedIn
-      ? [
-          ".job-details-jobs-unified-top-card__company-name",
-          ".job-details-jobs-unified-top-card__company-name a",
-          ".jobs-unified-top-card__company-name",
-          ".topcard__org-name-link",
-        ]
-      : [
-          "[data-testid='inlineHeader-companyName']",
-          ".jobsearch-InlineCompanyRating-companyHeader a",
-          ".jobsearch-CompanyInfoContainer a",
-        ]
-  );
+  const liCompanySel = [
+    ".job-details-jobs-unified-top-card__company-name",
+    ".job-details-jobs-unified-top-card__company-name a",
+    ".jobs-unified-top-card__company-name",
+    ".topcard__org-name-link",
+    "a[href*='/company/']",
+  ];
+  const idCompanySel = [
+    "[data-testid='inlineHeader-companyName']",
+    ".jobsearch-InlineCompanyRating-companyHeader a",
+    ".jobsearch-CompanyInfoContainer a",
+  ];
+  let companyEl = isLinkedIn
+    ? firstMatch(liCompanySel, main) || firstMatch(liCompanySel)
+    : firstMatch(idCompanySel, main) || firstMatch(idCompanySel);
   if (!companyEl && main && isLinkedIn) {
     companyEl = main.querySelector("a[href*='/company/']");
   }
