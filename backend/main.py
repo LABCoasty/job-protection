@@ -16,6 +16,7 @@ from schemas import (
     CompanySignal,
     JobPostSignal,
     ListingSnapshot,
+    ResumeMatch,
     ScanRequest,
     ScanResponse,
     ScanResult,
@@ -156,7 +157,12 @@ def scan(body: ScanRequest):
         resolved_company or body.companyName,
         domain=_extract_domain_from_email(body.contactInfo),
     )
-    analysis = ollama_service.analyze(snapshot_dict, description, search_evidence)
+    analysis = ollama_service.analyze(
+        snapshot_dict,
+        description,
+        search_evidence,
+        resume=body.resumeText or "",
+    )
     if analysis:
         # Prefer LLM-extracted fields if they look better than what we had.
         if analysis.get("extractedJobTitle") and (_looks_unknown(snapshot.jobTitle) or not snapshot.jobTitle):
@@ -167,6 +173,7 @@ def scan(body: ScanRequest):
             snapshot = snapshot.model_copy(update={"location": analysis["extractedLocation"]})
         if analysis.get("extractedEmploymentType") and not snapshot.employmentType:
             snapshot = snapshot.model_copy(update={"employmentType": analysis["extractedEmploymentType"]})
+        resume_match = analysis.get("resumeMatch")
         result = ScanResult(
             id=scan_id,
             timestamp=datetime.utcnow(),
@@ -176,6 +183,7 @@ def scan(body: ScanRequest):
             snapshot=snapshot,
             jobPostSignals=analysis["jobPostSignals"],
             companySignals=analysis["companySignals"],
+            resumeMatch=ResumeMatch(**resume_match) if resume_match else None,
         )
     else:
         result = _mock_scan_result(snapshot, scan_id)

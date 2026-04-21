@@ -36,8 +36,10 @@ window.addEventListener("message", async (event) => {
     if (data.type === "JOBGUARD_GET_GOOGLE_STATUS") {
       await pushGoogleStatus();
     } else if (data.type === "JOBGUARD_CONNECT_GOOGLE") {
-      await connect();
-      await pushGoogleStatus();
+      // chrome.identity.getAuthToken({ interactive: true }) requires a user
+      // gesture and a top-level window. Route through the Options page where
+      // the existing working Connect button handles the OAuth flow directly.
+      chrome.runtime.openOptionsPage();
     } else if (data.type === "JOBGUARD_DISCONNECT_GOOGLE") {
       await disconnect();
       await pushGoogleStatus();
@@ -47,6 +49,14 @@ window.addEventListener("message", async (event) => {
     }
   } catch (e) {
     console.warn("JobGuard bridge error:", e);
+  }
+});
+
+// Keep the iframe's status in sync when the user returns from the Options page.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "sync") return;
+  if ("spreadsheetId" in changes || "autoLog" in changes) {
+    pushGoogleStatus();
   }
 });
 

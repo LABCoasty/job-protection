@@ -34,6 +34,13 @@ export interface ListingSnapshot {
   descriptionLength: number
 }
 
+export interface ResumeMatch {
+  score: number
+  summary: string
+  strengths: string[]
+  gaps: string[]
+}
+
 export interface ScanResult {
   id: string
   timestamp: Date
@@ -43,6 +50,7 @@ export interface ScanResult {
   snapshot: ListingSnapshot
   jobPostSignals: JobPostSignal[]
   companySignals: CompanySignal[]
+  resumeMatch?: ResumeMatch | null
 }
 
 export interface ScanHistoryItem {

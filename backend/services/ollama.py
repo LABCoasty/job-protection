@@ -8,7 +8,7 @@ from config import get_config
 from schemas import CompanySignal, JobPostSignal
 
 
-def _build_prompt(snapshot: dict, description: str, search_evidence: str) -> str:
+def _build_prompt(snapshot: dict, description: str, search_evidence: str, resume: str = "") -> str:
     return f"""You are a job listing fraud analyst protecting a jobseeker from ghost jobs, scams, and untrustworthy employers. You have been given a job posting plus a deep-dive web investigation of the company across multiple axes (legitimacy, fraud reports, reviews, legal actions, layoffs, data-privacy practices).
 
 IMPORTANT: The "Title" and "Company" fields in the metadata below may be missing or say "Unknown (extract from description)" — this means the browser extension could not scrape them. In that case, YOU must extract the real jobTitle and companyName from the job description text, and include them as "extractedJobTitle" and "extractedCompanyName" at the top level of your JSON response. Also extract location, salary range, and employment type into "extractedLocation", "extractedSalary", "extractedEmploymentType" when present in the description. If a field is genuinely unavailable, use an empty string.
@@ -31,7 +31,13 @@ Output only valid JSON (no markdown, no extra text) with this exact structure:
   ],
   "companySignals": [
     {{ "id": "1", "status": "good"|"warn"|"bad", "label": "<short label>", "evidence": "<one sentence citing specific external evidence>" }}
-  ]
+  ],
+  "resumeMatch": {{
+    "score": <0-100 integer: how well the resume matches the job, or 0 if no resume>,
+    "summary": "<one sentence overall fit assessment, or 'No resume provided' if no resume>",
+    "strengths": ["<specific resume strength that matches the job>", "..."],
+    "gaps": ["<specific job requirement the resume does not clearly demonstrate>", "..."]
+  }}
 }}
 
 Rules:
@@ -40,6 +46,7 @@ Rules:
 - companySignals: 6 signals, one per investigation axis above, using the external evidence directly.
 - Evidence strings must reference what you actually observed — never fabricate.
 - Base your analysis on the ACTUAL description content, not the possibly-stale Title/Company metadata.
+- resumeMatch: If a resume section is provided below, compare the candidate's skills, experience, and education to the job requirements; give a calibrated 0-100 fit score with concrete strengths (3-5) and gaps (2-4). If NO resume is provided, set score=0, summary="No resume provided", strengths=[], gaps=[].
 
 Job listing metadata:
 - Title: {snapshot.get('jobTitle', '')}
@@ -62,6 +69,9 @@ Job description (excerpt):
 
 External company investigation (labeled sections):
 {search_evidence[:6000] if search_evidence else 'No external evidence.'}
+
+Candidate resume (for job-match analysis):
+{resume[:6000] if resume else 'No resume provided — return resumeMatch with score=0 and summary="No resume provided".'}
 
 Output only the JSON object, nothing else."""
 
@@ -212,13 +222,18 @@ def preextract_fields(description: str) -> dict | None:
     }
 
 
-def analyze(snapshot: dict, description: str, search_evidence: str) -> dict | None:
+def analyze(
+    snapshot: dict,
+    description: str,
+    search_evidence: str,
+    resume: str = "",
+) -> dict | None:
     """
     Analyze listing with Groq (hosted) if GROQ_API_KEY set, else local Ollama.
     Returns normalized dict, or None if the provider fails / returns invalid JSON.
     """
     config = get_config()
-    prompt = _build_prompt(snapshot, description or "", search_evidence or "")
+    prompt = _build_prompt(snapshot, description or "", search_evidence or "", resume or "")
     if config.get("groq_api_key"):
         raw = _call_groq(prompt, config["groq_api_key"], config["groq_model"])
     else:
@@ -228,4 +243,19 @@ def analyze(snapshot: dict, description: str, search_evidence: str) -> dict | No
     parsed = _parse_json(raw)
     if not parsed or not isinstance(parsed, dict):
         return None
-    return _normalize(parsed)
+    result = _normalize(parsed)
+    # Preserve the resumeMatch block from the raw response.
+    rm = parsed.get("resumeMatch")
+    if isinstance(rm, dict):
+        try:
+            score = int(rm.get("score") or 0)
+        except (TypeError, ValueError):
+            score = 0
+        score = max(0, min(100, score))
+        result["resumeMatch"] = {
+            "score": score,
+            "summary": (rm.get("summary") or "").strip() or "No resume provided",
+            "strengths": [s for s in (rm.get("strengths") or []) if isinstance(s, str) and s.strip()],
+            "gaps": [g for g in (rm.get("gaps") or []) if isinstance(g, str) and g.strip()],
+        }
+    return result

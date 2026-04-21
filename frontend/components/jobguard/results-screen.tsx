@@ -89,7 +89,7 @@ const nextSteps = [
 ]
 
 export function ResultsScreen({ result, onExport, onBack }: ResultsScreenProps) {
-  const { trustScore, riskLevel, primaryWarning, snapshot, jobPostSignals, companySignals } = result
+  const { trustScore, riskLevel, primaryWarning, snapshot, jobPostSignals, companySignals, resumeMatch } = result
 
   const jobSignalCounts = {
     good: jobPostSignals.filter((s) => s.status === "good").length,
@@ -222,6 +222,51 @@ export function ResultsScreen({ result, onExport, onBack }: ResultsScreenProps) 
             </div>
           </div>
         </div>
+
+        {/* Resume Match (only if a resume was sent) */}
+        {resumeMatch && resumeMatch.score > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <User className="w-4 h-4 text-muted-foreground" />
+              Resume Match
+            </h3>
+            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+              <div className="flex items-center gap-4">
+                <div className={cn("text-3xl font-bold tabular-nums", getScoreColor(resumeMatch.score))}>
+                  {resumeMatch.score}
+                  <span className="text-base text-muted-foreground font-medium">/100</span>
+                </div>
+                <p className="text-sm text-foreground leading-relaxed flex-1">{resumeMatch.summary}</p>
+              </div>
+              {resumeMatch.strengths.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-success">Strengths</p>
+                  <ul className="space-y-1">
+                    {resumeMatch.strengths.map((s, i) => (
+                      <li key={i} className="text-xs text-foreground flex gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0 mt-0.5" />
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {resumeMatch.gaps.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-warning">Gaps</p>
+                  <ul className="space-y-1">
+                    {resumeMatch.gaps.map((g, i) => (
+                      <li key={i} className="text-xs text-foreground flex gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+                        <span>{g}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Evidence Breakdown */}
         <Accordion type="multiple" defaultValue={["job-signals", "company-signals"]} className="space-y-3">

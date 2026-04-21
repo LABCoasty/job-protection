@@ -69,7 +69,15 @@ class ScanRequest(BaseModel):
     contactInfo: str | None = None
     recruiterVisible: str | None = None
     descriptionLength: int = 0
-    description: str | None = None  # raw text for Ollama
+    description: str | None = None  # raw text for LLM
+    resumeText: str | None = None  # user's resume (optional) for job-match analysis
+
+
+class ResumeMatch(BaseModel):
+    score: int  # 0-100 fit score
+    summary: str  # one sentence
+    strengths: list[str] = []
+    gaps: list[str] = []
 
 
 class ScanResult(BaseModel):
@@ -81,6 +89,7 @@ class ScanResult(BaseModel):
     snapshot: ListingSnapshot
     jobPostSignals: list[JobPostSignal]
     companySignals: list[CompanySignal]
+    resumeMatch: ResumeMatch | None = None
 
 
 class ScanResponse(BaseModel):

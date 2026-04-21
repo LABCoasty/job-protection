@@ -14,6 +14,11 @@ const frontendInput = el("frontend-url");
 const btnSaveFrontend = el("btn-save-frontend");
 const tokenInput = el("api-token");
 const btnSaveToken = el("btn-save-token");
+const resumeFileInput = el("resume-file");
+const resumeTextarea = el("resume-text");
+const resumeInfo = el("resume-info");
+const btnSaveResume = el("btn-save-resume");
+const btnClearResume = el("btn-clear-resume");
 const toast = el("toast");
 
 function showToast(text, { error = false } = {}) {
@@ -111,7 +116,64 @@ btnSaveToken.addEventListener("click", async () => {
   showToast(value ? "Access token saved" : "Access token cleared");
 });
 
+// --- Resume handling ---
+// chrome.storage.sync has 8KB per-item and 100KB total limits, so resumes
+// (which can be long) live in chrome.storage.local instead.
+
+async function loadResume() {
+  const { resumeText, resumeUpdatedAt } = await chrome.storage.local.get([
+    "resumeText",
+    "resumeUpdatedAt",
+  ]);
+  resumeTextarea.value = resumeText || "";
+  if (resumeText) {
+    const chars = resumeText.length;
+    const when = resumeUpdatedAt ? new Date(resumeUpdatedAt).toLocaleString() : "unknown time";
+    resumeInfo.textContent = `Saved (${chars.toLocaleString()} chars, updated ${when}).`;
+  } else {
+    resumeInfo.textContent = "No resume saved yet.";
+  }
+}
+
+resumeFileInput.addEventListener("change", async () => {
+  const file = resumeFileInput.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    resumeTextarea.value = text;
+    showToast(`Loaded ${file.name}. Click Save to store.`);
+  } catch (e) {
+    showToast(`Could not read file: ${e.message || e}`, { error: true });
+  }
+});
+
+btnSaveResume.addEventListener("click", async () => {
+  const text = (resumeTextarea.value || "").trim();
+  if (!text) {
+    showToast("Paste resume text or upload a .txt file first.", { error: true });
+    return;
+  }
+  // Keep a reasonable ceiling — the prompt budget is already tight.
+  const MAX = 40000;
+  const clipped = text.length > MAX ? text.slice(0, MAX) : text;
+  await chrome.storage.local.set({
+    resumeText: clipped,
+    resumeUpdatedAt: new Date().toISOString(),
+  });
+  await loadResume();
+  showToast("Resume saved");
+});
+
+btnClearResume.addEventListener("click", async () => {
+  await chrome.storage.local.remove(["resumeText", "resumeUpdatedAt"]);
+  resumeTextarea.value = "";
+  resumeFileInput.value = "";
+  await loadResume();
+  showToast("Resume cleared");
+});
+
 refreshStatus();
 loadBackend();
 loadFrontend();
 loadToken();
+loadResume();
