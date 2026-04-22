@@ -505,6 +505,7 @@
     const lastName = parts.length > 1 ? parts.slice(-1)[0] : "";
     const middleName = parts.length > 2 ? parts.slice(1, -1).join(" ") : "";
     const loc = splitLocation(parsed.location);
+    const links = parsed.links || {};
     return {
       firstName,
       middleName,
@@ -521,8 +522,249 @@
       postalCode: loc.postalCode || "",
       country: loc.state ? "United States" : "",  // best-effort default when we saw a US state
       summary: parsed.summary || "",
-      linkedinUrl: parsed.linkedinUrl || "",
+      linkedinUrl: links.linkedin || parsed.linkedinUrl || "",
+      githubUrl: links.github || "",
+      portfolioUrl: links.portfolio || "",
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // Section-scoped helpers
+  // --------------------------------------------------------------------------
+
+  function findByLabelInRoot(root, keywords) {
+    if (!root) return null;
+    const labels = Array.from(root.querySelectorAll("label"));
+    for (const label of labels) {
+      const text = (label.textContent || "").toLowerCase();
+      if (!keywords.some((k) => text.includes(k))) continue;
+      let input = null;
+      const forAttr = label.getAttribute("for");
+      if (forAttr) {
+        try {
+          input = root.querySelector(`#${CSS.escape(forAttr)}`) || document.getElementById(forAttr);
+        } catch {}
+      }
+      if (!input) input = label.querySelector("input, textarea, select");
+      if (!input) {
+        const parent = label.closest("div, fieldset, section");
+        if (parent) input = parent.querySelector("input, textarea, select");
+      }
+      if (isFillable(input)) return input;
+    }
+    return null;
+  }
+
+  // Find a container whose heading (or first strong/label) matches one of the
+  // keywords. Used for Work Experience, Education, etc.
+  function findSectionByHeading(keywords) {
+    const headingSelectors = "h1, h2, h3, h4, h5, legend, strong, [role='heading']";
+    for (const c of document.querySelectorAll(headingSelectors)) {
+      const text = (c.textContent || "").toLowerCase().trim();
+      if (!text) continue;
+      if (!keywords.some((k) => text === k || text.startsWith(k))) continue;
+      let section = c.closest("fieldset, section, [class*='experience' i], [class*='section' i]");
+      if (!section) {
+        // Fall back to the heading's parent that also contains at least one input.
+        let p = c.parentElement;
+        while (p && p !== document.body) {
+          if (p.querySelector("input, textarea, select")) {
+            section = p;
+            break;
+          }
+          p = p.parentElement;
+        }
+      }
+      if (section) return section;
+    }
+    return null;
+  }
+
+  async function fillWorkExperience(parsed) {
+    const section = findSectionByHeading([
+      "work experience",
+      "work experience 1",
+      "experience",
+      "employment",
+      "work history",
+    ]);
+    if (!section) return { filled: 0, fields: [] };
+    const entry = (parsed.workHistory && parsed.workHistory[0]) || {
+      title: parsed.currentTitle,
+      company: parsed.topCompanies && parsed.topCompanies[0],
+      location: parsed.location,
+      description: parsed.summary,
+      startDate: "",
+      endDate: "",
+      current: true,
+    };
+    let filled = 0;
+    const fields = [];
+
+    const titleEl = findByLabelInRoot(section, ["job title", "title", "position"]);
+    if (titleEl && entry.title && setInputValue(titleEl, entry.title)) {
+      filled++;
+      fields.push("we.title");
+    }
+
+    const companyEl = findByLabelInRoot(section, ["company", "employer", "organization"]);
+    if (companyEl && entry.company && setInputValue(companyEl, entry.company)) {
+      filled++;
+      fields.push("we.company");
+    }
+
+    const locationEl = findByLabelInRoot(section, ["location"]);
+    if (locationEl && entry.location && setInputValue(locationEl, entry.location)) {
+      filled++;
+      fields.push("we.location");
+    }
+
+    const descriptionEl = findByLabelInRoot(section, [
+      "role description",
+      "description",
+      "responsibilities",
+      "what did you do",
+    ]);
+    if (descriptionEl && entry.description && setInputValue(descriptionEl, entry.description)) {
+      filled++;
+      fields.push("we.description");
+    }
+
+    // Dates: some forms use MM/YYYY inputs; best-effort fill.
+    const fromEl = findByLabelInRoot(section, ["from", "start date", "start"]);
+    if (fromEl && entry.startDate && setInputValue(fromEl, entry.startDate)) {
+      filled++;
+      fields.push("we.from");
+    }
+    const toEl = findByLabelInRoot(section, ["to", "end date", "end"]);
+    if (toEl && entry.endDate && !entry.current && setInputValue(toEl, entry.endDate)) {
+      filled++;
+      fields.push("we.to");
+    }
+
+    // "I currently work here" checkbox
+    if (entry.current) {
+      const labels = Array.from(section.querySelectorAll("label"));
+      for (const l of labels) {
+        const text = (l.textContent || "").toLowerCase();
+        if (text.includes("currently work") || text.includes("present")) {
+          let checkbox = l.querySelector("input[type='checkbox']");
+          if (!checkbox) {
+            const forAttr = l.getAttribute("for");
+            if (forAttr) checkbox = document.getElementById(forAttr);
+          }
+          if (checkbox && !checkbox.checked) {
+            checkbox.click();
+            filled++;
+            fields.push("we.current");
+          }
+          break;
+        }
+      }
+    }
+
+    return { filled, fields };
+  }
+
+  async function fillSkills(parsed) {
+    const skills = (parsed.skills || []).slice(0, 8);
+    if (!skills.length) return { filled: 0, fields: [] };
+
+    const searchEl =
+      findField([
+        "input[placeholder='Search' i][aria-expanded]",
+        "input[placeholder*='Search' i][aria-label*='skill' i]",
+        "input[aria-label*='skill' i]",
+        "input[placeholder*='skill' i]",
+      ]) || findByLabel(["type to add skills", "add skills", "skills"]);
+    if (!searchEl) return { filled: 0, fields: [] };
+
+    let filled = 0;
+    const fields = [];
+    for (const skill of skills) {
+      searchEl.focus();
+      setInputValue(searchEl, skill);
+      searchEl.dispatchEvent(new Event("input", { bubbles: true }));
+      searchEl.dispatchEvent(new KeyboardEvent("keyup", { key: skill.slice(-1), bubbles: true }));
+      const list = await waitFor(
+        () =>
+          document.querySelector("[role='listbox']") ||
+          document.querySelector("ul[class*='suggestion' i]") ||
+          document.querySelector("ul[class*='autocomplete' i]"),
+        { timeout: 700 }
+      );
+      if (!list) continue;
+      const options = Array.from(
+        list.querySelectorAll("[role='option'], li")
+      );
+      const match =
+        options.find(
+          (o) => (o.textContent || "").trim().toLowerCase() === skill.toLowerCase()
+        ) ||
+        options.find((o) =>
+          (o.textContent || "").toLowerCase().includes(skill.toLowerCase())
+        );
+      if (match) {
+        match.click();
+        filled++;
+        fields.push(`skill:${skill}`);
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    // Clear the search input so we don't leave stray text.
+    try {
+      setInputValue(searchEl, "");
+    } catch {}
+    return { filled, fields };
+  }
+
+  async function fillWebsites(values) {
+    const urls = [values.linkedinUrl, values.githubUrl, values.portfolioUrl].filter(Boolean);
+    if (!urls.length) return { filled: 0, fields: [] };
+
+    // Look for a heading or label that mentions websites / URLs / links.
+    const section = findSectionByHeading([
+      "websites",
+      "relevant websites",
+      "links",
+      "online presence",
+      "social",
+    ]);
+
+    let filled = 0;
+    const fields = [];
+
+    // Pattern 1: dedicated LinkedIn / GitHub input (already there).
+    const liEl = findField(genericSelectors("linkedinUrl"));
+    if (liEl && values.linkedinUrl && setInputValue(liEl, values.linkedinUrl)) {
+      filled++;
+      fields.push("web.linkedin");
+    }
+
+    // Pattern 2: "Add" button pattern (screenshot 1 / Greenhouse custom).
+    const addBtn = (section
+      ? Array.from(section.querySelectorAll("button"))
+      : Array.from(document.querySelectorAll("button"))
+    ).find((b) => (b.textContent || "").trim().toLowerCase() === "add");
+
+    if (addBtn && !liEl) {
+      for (const url of urls) {
+        addBtn.click();
+        await new Promise((r) => setTimeout(r, 180));
+        const input = findField([
+          "input[type='url']:not([value]):not(:read-only)",
+          "input[placeholder*='url' i]:not([value])",
+          "input[placeholder*='website' i]:not([value])",
+          "input[name*='website' i]",
+        ]);
+        if (input && setInputValue(input, url)) {
+          filled++;
+          fields.push(`web:${url.includes("linkedin") ? "linkedin" : url.includes("github") ? "github" : "portfolio"}`);
+        }
+      }
+    }
+
+    return { filled, fields };
   }
 
   async function autofillFromProfile(parsed) {
@@ -577,6 +819,34 @@
       } else {
         missing.push(key);
       }
+    }
+
+    // Work Experience section (all ATS layouts that use "Job Title / Company /
+    // Location / Role Description" labels — Greenhouse, Ashby, many custom).
+    try {
+      const we = await fillWorkExperience(parsed);
+      filled += we.filled;
+      filledFields.push(...we.fields);
+    } catch (e) {
+      console.warn("JobGuard: work-experience fill failed:", e);
+    }
+
+    // Skills autocomplete (Type to Add Skills pattern).
+    try {
+      const sk = await fillSkills(parsed);
+      filled += sk.filled;
+      filledFields.push(...sk.fields);
+    } catch (e) {
+      console.warn("JobGuard: skills fill failed:", e);
+    }
+
+    // Websites / URLs section.
+    try {
+      const ws = await fillWebsites(values);
+      filled += ws.filled;
+      filledFields.push(...ws.fields);
+    } catch (e) {
+      console.warn("JobGuard: websites fill failed:", e);
     }
 
     // Workday custom dropdowns (State, Country, phone country code).

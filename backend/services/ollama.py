@@ -199,14 +199,35 @@ def parse_resume(resume_text: str) -> dict | None:
         '  "name": "<full name or empty>",\n'
         '  "email": "<primary email or empty>",\n'
         '  "phone": "<phone or empty>",\n'
-        '  "location": "<city/region or empty>",\n'
+        '  "location": "<\'City, ST ZIP\' or \'City, State\' — use 2-letter codes for US states>",\n'
         '  "currentTitle": "<most recent job title or empty>",\n'
         '  "yearsOfExperience": "<approximate total years, e.g. \'5+\', or empty>",\n'
         '  "skills": ["<concrete technical or professional skills, deduped>"],\n'
         '  "topCompanies": ["<most recent 2-5 employers>"],\n'
         '  "education": ["<degree + institution lines, most recent first>"],\n'
-        '  "summary": "<one-sentence professional summary>"\n'
+        '  "summary": "<one-sentence professional summary>",\n'
+        '  "links": {\n'
+        '    "linkedin": "<full https URL or empty>",\n'
+        '    "github": "<full https URL or empty>",\n'
+        '    "portfolio": "<full https URL of personal site or empty>",\n'
+        '    "twitter": "<full https URL or empty>"\n'
+        '  },\n'
+        '  "workHistory": [\n'
+        '    {\n'
+        '      "title": "<job title>",\n'
+        '      "company": "<employer>",\n'
+        '      "location": "<city/state or empty>",\n'
+        '      "startDate": "<MM/YYYY or \'Jan 2022\' or empty>",\n'
+        '      "endDate": "<MM/YYYY or \'Present\' or empty>",\n'
+        '      "current": <true if this is the current role>,\n'
+        '      "description": "<one-to-two sentence role summary>"\n'
+        '    }\n'
+        '  ]\n'
         "}\n\n"
+        "Guidelines:\n"
+        "- workHistory: most recent first, up to 5 entries.\n"
+        "- If a field isn\'t present in the resume, use empty string \"\" (or empty array for lists).\n"
+        "- links.linkedin: must be a full URL starting with https://www.linkedin.com/in/... if present.\n\n"
         "Resume text:\n"
         + resume_text[:12000]
     )
@@ -226,17 +247,45 @@ def parse_resume(resume_text: str) -> dict | None:
             return []
         return [str(x).strip() for x in v if isinstance(x, (str, int, float)) and str(x).strip()]
 
+    links_raw = parsed.get("links") or {}
+    if not isinstance(links_raw, dict):
+        links_raw = {}
+
+    def _str(v):
+        return (v if isinstance(v, str) else "").strip()
+
+    work_history = []
+    for item in (parsed.get("workHistory") or [])[:5]:
+        if not isinstance(item, dict):
+            continue
+        work_history.append({
+            "title": _str(item.get("title")),
+            "company": _str(item.get("company")),
+            "location": _str(item.get("location")),
+            "startDate": _str(item.get("startDate")),
+            "endDate": _str(item.get("endDate")),
+            "current": bool(item.get("current")),
+            "description": _str(item.get("description")),
+        })
+
     return {
-        "name": (parsed.get("name") or "").strip(),
-        "email": (parsed.get("email") or "").strip(),
-        "phone": (parsed.get("phone") or "").strip(),
-        "location": (parsed.get("location") or "").strip(),
-        "currentTitle": (parsed.get("currentTitle") or "").strip(),
-        "yearsOfExperience": (parsed.get("yearsOfExperience") or "").strip(),
+        "name": _str(parsed.get("name")),
+        "email": _str(parsed.get("email")),
+        "phone": _str(parsed.get("phone")),
+        "location": _str(parsed.get("location")),
+        "currentTitle": _str(parsed.get("currentTitle")),
+        "yearsOfExperience": _str(parsed.get("yearsOfExperience")),
         "skills": _strs(parsed.get("skills"))[:40],
         "topCompanies": _strs(parsed.get("topCompanies"))[:10],
         "education": _strs(parsed.get("education"))[:10],
-        "summary": (parsed.get("summary") or "").strip(),
+        "summary": _str(parsed.get("summary")),
+        "links": {
+            "linkedin": _str(links_raw.get("linkedin")),
+            "github": _str(links_raw.get("github")),
+            "portfolio": _str(links_raw.get("portfolio")),
+            "twitter": _str(links_raw.get("twitter")),
+        },
+        "workHistory": work_history,
     }
 
 
