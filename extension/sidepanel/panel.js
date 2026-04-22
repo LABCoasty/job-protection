@@ -189,10 +189,11 @@ async function ensureAutofillInjected(tabId) {
       target: { tabId },
       files: ["content/autofill.js"],
     });
-    return true;
+    return { ok: true };
   } catch (e) {
-    console.warn("JobGuard: on-demand autofill injection failed:", e);
-    return false;
+    const message = String(e?.message || e);
+    console.error("JobGuard: on-demand autofill injection failed:", message, e);
+    return { ok: false, error: message };
   }
 }
 
@@ -218,6 +219,14 @@ async function runAutofill(requestId) {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error("No active tab.");
+    const tabUrl = tab?.url || "";
+    console.log("[JobGuard] autofill start", { tabId: tab.id, tabUrl });
+    // Refuse early if the URL is a restricted scheme we can't script into.
+    if (/^(chrome|chrome-extension|edge|about|view-source):/i.test(tabUrl)) {
+      throw new Error(
+        `Auto-fill can't run on browser-internal pages (${tabUrl.split(":")[0]}://). Open a job application form first.`
+      );
+    }
     const { resumeParsed } = await chrome.storage.local.get(["resumeParsed"]);
     if (!resumeParsed) {
       throw new Error("No parsed resume yet. Open the Resume tab and click Parse first.");
@@ -225,21 +234,29 @@ async function runAutofill(requestId) {
 
     // 1st try: content script may already be injected from the manifest match.
     let res = await sendAutofillMessage(tab.id);
+    let injectionError = null;
 
     // 2nd try: if the content script wasn't there (extension reloaded, URL
     // pattern missed the match), inject it on demand and retry.
     if (!res?.ok && res?.__channel) {
-      const injected = await ensureAutofillInjected(tab.id);
-      if (injected) {
+      const inj = await ensureAutofillInjected(tab.id);
+      if (inj.ok) {
         res = await sendAutofillMessage(tab.id);
+      } else {
+        injectionError = inj.error;
       }
     }
 
     if (!res?.ok) {
-      const detail = res?.__channel ? ` (${res.__channel})` : "";
+      // Surface the real Chrome error first — it's the actionable bit
+      // (e.g. "Cannot access a chrome:// URL", "permissions not granted").
+      const pieces = [];
+      if (injectionError) pieces.push(injectionError);
+      else if (res?.__channel) pieces.push(res.__channel);
+      const cause = pieces.length ? `: ${pieces.join(" · ")}` : "";
       throw new Error(
         res?.error ||
-          `Auto-fill couldn't run on this page${detail}. Make sure you're on a job application form on a supported ATS (LinkedIn, Workday, Greenhouse, Lever, Workable, Ashby, SmartRecruiters, BambooHR, iCIMS, Taleo).`
+          `Auto-fill couldn't run on this page${cause}. Make sure you're on a supported ATS apply form (LinkedIn, Workday, Greenhouse, Lever, Workable, Ashby, SmartRecruiters, BambooHR, iCIMS, Taleo) — the tab URL must match one of JobGuard's host_permissions.`
       );
     }
 
