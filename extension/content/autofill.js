@@ -104,32 +104,80 @@
     firstName: [
       "input[data-automation-id='legalNameSection_firstName']",
       "input[data-automation-id='name--legalName--firstName']",
+      "input[data-automation-id*='firstName' i]",
     ],
     lastName: [
       "input[data-automation-id='legalNameSection_lastName']",
       "input[data-automation-id='name--legalName--lastName']",
+      "input[data-automation-id*='lastName' i]",
     ],
-    middleName: ["input[data-automation-id='legalNameSection_middleName']"],
+    middleName: [
+      "input[data-automation-id='legalNameSection_middleName']",
+      "input[data-automation-id*='middleName' i]",
+    ],
     email: [
       "input[data-automation-id='email']",
       "input[data-automation-id='contact-email']",
+      "input[data-automation-id*='email' i]",
     ],
     phone: [
       "input[data-automation-id='phone-number']",
       "input[data-automation-id='phoneNumber']",
+      "input[data-automation-id*='phone-number' i]",
+      "input[data-automation-id*='phoneNumber' i]",
     ],
-    addressLine1: ["input[data-automation-id='addressSection_addressLine1']"],
-    addressLine2: ["input[data-automation-id='addressSection_addressLine2']"],
-    city: ["input[data-automation-id='addressSection_city']"],
-    postalCode: ["input[data-automation-id='addressSection_postalCode']"],
+    addressLine1: [
+      "input[data-automation-id='addressSection_addressLine1']",
+      "input[data-automation-id*='addressLine1' i]",
+    ],
+    addressLine2: [
+      "input[data-automation-id='addressSection_addressLine2']",
+      "input[data-automation-id*='addressLine2' i]",
+    ],
+    city: [
+      "input[data-automation-id='addressSection_city']",
+      "input[data-automation-id*='city' i]",
+    ],
+    postalCode: [
+      "input[data-automation-id='addressSection_postalCode']",
+      "input[data-automation-id*='postalCode' i]",
+      "input[data-automation-id*='postal-code' i]",
+      "input[data-automation-id*='zipCode' i]",
+    ],
     currentCompany: [
       "input[data-automation-id='workExperiencesSection_companyName']",
+      "input[data-automation-id*='companyName' i]",
     ],
     currentTitle: [
       "input[data-automation-id='workExperiencesSection_jobTitle']",
+      "input[data-automation-id*='jobTitle' i]",
     ],
     summary: [
       "textarea[data-automation-id='workExperiencesSection_description']",
+      "textarea[data-automation-id*='description' i]",
+    ],
+  };
+
+  // Workday custom dropdowns: the "button" is the visible combobox trigger,
+  // not a native <select>. Clicking it opens a listbox of options.
+  const WORKDAY_DROPDOWN_SELECTORS = {
+    state: [
+      "button[data-automation-id='addressSection_countryRegion']",
+      "button[data-automation-id='countryRegion']",
+      "button[data-automation-id*='countryRegion' i]",
+      "button[data-automation-id*='state' i]",
+    ],
+    country: [
+      "button[data-automation-id='countryDropdown']",
+      "button[data-automation-id*='country' i]:not([data-automation-id*='Region' i])",
+    ],
+    phoneCountryCode: [
+      "button[data-automation-id='country-phone-code']",
+      "button[data-automation-id='countryPhoneCode']",
+    ],
+    phoneDeviceType: [
+      "button[data-automation-id='phone-device-type']",
+      "button[data-automation-id='phoneDeviceType']",
     ],
   };
 
@@ -328,6 +376,108 @@
   }
 
   // --------------------------------------------------------------------------
+  // Workday-style custom dropdown: click the trigger, wait for the listbox,
+  // click the option whose text matches one of the candidates. Returns a
+  // Promise<boolean>.
+  // --------------------------------------------------------------------------
+
+  function waitFor(predicate, { timeout = 1500, interval = 50 } = {}) {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const tick = () => {
+        const value = predicate();
+        if (value) {
+          resolve(value);
+          return;
+        }
+        if (Date.now() - start >= timeout) {
+          resolve(null);
+          return;
+        }
+        setTimeout(tick, interval);
+      };
+      tick();
+    });
+  }
+
+  async function fillCombobox(trigger, candidates) {
+    if (!trigger || !candidates?.length) return false;
+    const needles = candidates
+      .filter(Boolean)
+      .map((c) => String(c).trim().toLowerCase());
+    if (!needles.length) return false;
+
+    trigger.click();
+    // Wait for the listbox to appear. Workday uses role=listbox OR custom
+    // data-automation-id='promptOption'/'promptScroller'.
+    const listbox = await waitFor(() => {
+      return (
+        document.querySelector("[role='listbox']") ||
+        document.querySelector("[data-automation-id='promptScroller']") ||
+        document.querySelector("[data-automation-id*='promptOption']")?.parentElement
+      );
+    });
+    if (!listbox) return false;
+
+    const options = Array.from(
+      listbox.querySelectorAll(
+        "[role='option'], [data-automation-id='promptOption'], li, div[data-automation-id*='promptOption']"
+      )
+    );
+
+    const matchFor = (needle) => {
+      const exact = options.find(
+        (o) => (o.textContent || "").trim().toLowerCase() === needle
+      );
+      if (exact) return exact;
+      const starts = options.find((o) =>
+        (o.textContent || "").trim().toLowerCase().startsWith(needle)
+      );
+      if (starts) return starts;
+      return options.find((o) => (o.textContent || "").toLowerCase().includes(needle));
+    };
+
+    let chosen = null;
+    for (const needle of needles) {
+      chosen = matchFor(needle);
+      if (chosen) break;
+    }
+
+    if (!chosen) {
+      // Close by pressing Escape / clicking outside.
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      document.body.click();
+      return false;
+    }
+
+    chosen.click();
+    return true;
+  }
+
+  // Map common US state abbreviations to full names so Workday's listbox
+  // (which usually has full names) matches.
+  const US_STATES = {
+    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+    CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+    HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+    KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+    MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+    MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+    NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+    OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+    SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+    VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+    DC: "District of Columbia",
+  };
+
+  function expandState(value) {
+    if (!value) return [];
+    const up = value.toUpperCase().trim();
+    if (US_STATES[up]) return [US_STATES[up], up];
+    return [value];
+  }
+
+  // --------------------------------------------------------------------------
   // Address parser — the resume's "location" is often "San Francisco, CA 94102"
   // or "New York, NY" or "Remote". Split it into city / region / postal.
   // --------------------------------------------------------------------------
@@ -365,21 +515,25 @@
       currentCompany: (parsed.topCompanies && parsed.topCompanies[0]) || "",
       currentTitle: parsed.currentTitle || "",
       city: loc.city || parsed.location || "",
+      state: loc.state || "",
       location: parsed.location || "",
       addressLine1: "",
       postalCode: loc.postalCode || "",
+      country: loc.state ? "United States" : "",  // best-effort default when we saw a US state
       summary: parsed.summary || "",
       linkedinUrl: parsed.linkedinUrl || "",
     };
   }
 
-  function autofillFromProfile(parsed) {
+  async function autofillFromProfile(parsed) {
     if (!parsed) return { filled: 0, missing: ["no parsed resume"] };
     const values = buildFieldValues(parsed);
     const platform = platformSelectorsFromUrl();
+    const isWorkday = platformName() === "Workday";
 
-    // Order matters: these keys match the selector map keys above.
-    const keys = [
+    // Order matters: fill text inputs first, then try combobox dropdowns
+    // (since Workday's state listbox depends on the country being set first).
+    const inputKeys = [
       "firstName",
       "middleName",
       "lastName",
@@ -400,23 +554,14 @@
     const missing = [];
     const filledFields = [];
 
-    for (const key of keys) {
+    for (const key of inputKeys) {
       const value = values[key];
       if (!value) continue;
 
-      // 1. Platform-specific selectors
       let el = null;
-      if (platform && platform[key]) {
-        el = findField(platform[key]);
-      }
-      // 2. Generic selectors
-      if (!el) {
-        el = findField(genericSelectors(key));
-      }
-      // 3. Label-based
-      if (!el) {
-        el = findByLabel(labelsFor(key));
-      }
+      if (platform && platform[key]) el = findField(platform[key]);
+      if (!el) el = findField(genericSelectors(key));
+      if (!el) el = findByLabel(labelsFor(key));
 
       if (el) {
         const ok =
@@ -431,6 +576,35 @@
         }
       } else {
         missing.push(key);
+      }
+    }
+
+    // Workday custom dropdowns (State, Country, phone country code).
+    if (isWorkday) {
+      // Country first so the State listbox is populated correctly.
+      if (values.country) {
+        const trigger = findField(WORKDAY_DROPDOWN_SELECTORS.country);
+        if (trigger) {
+          const ok = await fillCombobox(trigger, [values.country]);
+          if (ok) {
+            filled++;
+            filledFields.push("country");
+          } else {
+            missing.push("country");
+          }
+        }
+      }
+      if (values.state) {
+        const trigger = findField(WORKDAY_DROPDOWN_SELECTORS.state);
+        if (trigger) {
+          const ok = await fillCombobox(trigger, expandState(values.state));
+          if (ok) {
+            filled++;
+            filledFields.push("state");
+          } else {
+            missing.push("state");
+          }
+        }
       }
     }
 
@@ -453,21 +627,22 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.action !== "AUTOFILL_FORM") return;
-    chrome.storage.local.get(["resumeParsed"], ({ resumeParsed }) => {
-      if (!resumeParsed) {
-        sendResponse({
-          ok: false,
-          error: "No parsed resume. Open JobGuard → Resume → Parse first.",
-        });
-        return;
-      }
+    (async () => {
       try {
-        const result = autofillFromProfile(resumeParsed);
+        const { resumeParsed } = await chrome.storage.local.get(["resumeParsed"]);
+        if (!resumeParsed) {
+          sendResponse({
+            ok: false,
+            error: "No parsed resume. Open JobGuard → Resume → Parse first.",
+          });
+          return;
+        }
+        const result = await autofillFromProfile(resumeParsed);
         sendResponse({ ok: true, ...result });
       } catch (e) {
         sendResponse({ ok: false, error: String(e.message || e) });
       }
-    });
+    })();
     return true; // async response
   });
 })();
