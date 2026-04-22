@@ -86,7 +86,14 @@ export function ResumeScreen({ onBack }: ResumeScreenProps) {
         { type: "JOBGUARD_SAVE_RESUME", text: trimmed },
         "*"
       )
-      setStatus("Saved")
+      setStatus("Saved — parsing with AI…")
+      // Auto-trigger the LLM parse so the resume is immediately usable for
+      // job-match scoring and auto-fill without a second click.
+      setParsing(true)
+      window.parent?.postMessage(
+        { type: "JOBGUARD_PARSE_RESUME", text: trimmed },
+        "*"
+      )
     } catch {
       setStatus("Could not save")
     }
@@ -153,12 +160,12 @@ export function ResumeScreen({ onBack }: ResumeScreenProps) {
               onChange={handleFile}
               className="hidden"
             />
-            <Button variant="default" size="sm" onClick={save} className="gap-2">
+            <Button variant="default" size="sm" onClick={save} className="gap-2" disabled={parsing}>
               <Save className="w-4 h-4" />
-              Save
+              {parsing ? "Parsing…" : "Save & parse"}
             </Button>
             <Button variant="outline" size="sm" onClick={parseNow} disabled={parsing}>
-              {parsing ? "Parsing…" : "Parse"}
+              {parsing ? "Parsing…" : "Re-parse"}
             </Button>
             <Button variant="ghost" size="sm" onClick={clear} className="gap-2 text-danger hover:text-danger">
               <Trash2 className="w-4 h-4" />
