@@ -106,6 +106,10 @@
       "input[data-automation-id='name--legalName--firstName']",
       "input[data-automation-id*='firstName' i]",
     ],
+    preferredName: [
+      "input[data-automation-id='preferredNameSection_firstName']",
+      "input[data-automation-id*='preferredName' i]",
+    ],
     lastName: [
       "input[data-automation-id='legalNameSection_lastName']",
       "input[data-automation-id='name--legalName--lastName']",
@@ -261,6 +265,15 @@
           "input[name*='first_name' i]",
           "input[autocomplete='given-name']",
         ];
+      case "preferredName":
+        return [
+          "input[id*='preferred-name' i]",
+          "input[id*='preferredName' i]",
+          "input[name*='preferred-name' i]",
+          "input[name*='preferred_name' i]",
+          "input[name*='nickname' i]",
+          "input[placeholder*='preferred' i]",
+        ];
       case "lastName":
         return [
           "input[id*='last-name' i]",
@@ -357,6 +370,7 @@
   function labelsFor(key) {
     switch (key) {
       case "firstName": return ["first name", "given name"];
+      case "preferredName": return ["preferred name", "nickname", "name you go by", "preferred first name"];
       case "lastName": return ["last name", "family name", "surname"];
       case "middleName": return ["middle name"];
       case "fullName": return ["full name", "your name"];
@@ -501,26 +515,42 @@
   function buildFieldValues(parsed) {
     const full = parsed.name || "";
     const parts = full.split(/\s+/).filter(Boolean);
-    const firstName = parts[0] || "";
-    const lastName = parts.length > 1 ? parts.slice(-1)[0] : "";
-    const middleName = parts.length > 2 ? parts.slice(1, -1).join(" ") : "";
-    const loc = splitLocation(parsed.location);
+    const firstName =
+      parsed.firstName || parts[0] || "";
+    const lastName =
+      parsed.lastName || (parts.length > 1 ? parts.slice(-1)[0] : "");
+    const middleName =
+      parsed.middleName || (parts.length > 2 ? parts.slice(1, -1).join(" ") : "");
+    const preferredName = parsed.preferredName || firstName;
+
+    const addr = parsed.address || {};
+    const legacyLoc = splitLocation(parsed.location);
     const links = parsed.links || {};
+
+    const city = addr.city || legacyLoc.city || "";
+    const state = addr.state || legacyLoc.state || "";
+    const postalCode = addr.postalCode || legacyLoc.postalCode || "";
+    const country =
+      addr.country || (state ? "United States" : "");
+
     return {
       firstName,
       middleName,
       lastName,
+      preferredName,
       fullName: full,
       email: parsed.email || "",
       phone: parsed.phone || "",
+      pronouns: parsed.pronouns || "",
+      workAuthorization: parsed.workAuthorization || "",
       currentCompany: (parsed.topCompanies && parsed.topCompanies[0]) || "",
       currentTitle: parsed.currentTitle || "",
-      city: loc.city || parsed.location || "",
-      state: loc.state || "",
-      location: parsed.location || "",
-      addressLine1: "",
-      postalCode: loc.postalCode || "",
-      country: loc.state ? "United States" : "",  // best-effort default when we saw a US state
+      city,
+      state,
+      location: parsed.location || [city, state, postalCode].filter(Boolean).join(", "),
+      addressLine1: addr.street || "",
+      postalCode,
+      country,
       summary: parsed.summary || "",
       linkedinUrl: links.linkedin || parsed.linkedinUrl || "",
       githubUrl: links.github || "",
@@ -777,6 +807,7 @@
     // (since Workday's state listbox depends on the country being set first).
     const inputKeys = [
       "firstName",
+      "preferredName",
       "middleName",
       "lastName",
       "fullName",
@@ -784,9 +815,9 @@
       "phone",
       "currentCompany",
       "currentTitle",
+      "addressLine1",
       "city",
       "location",
-      "addressLine1",
       "postalCode",
       "summary",
       "linkedinUrl",
