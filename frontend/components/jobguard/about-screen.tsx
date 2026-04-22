@@ -1,6 +1,6 @@
 "use client"
 
-import { Shield, AlertTriangle, Lock, Eye, FlaskConical, Github } from "lucide-react"
+import { Shield, AlertTriangle, Lock, Eye, FlaskConical, Github, Settings } from "lucide-react"
 
 interface AboutScreenProps {
   onBack: () => void
@@ -104,6 +104,25 @@ export function AboutScreen({ onBack }: AboutScreenProps) {
             </li>
           </ul>
         </div>
+
+        {/* Open settings */}
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              window.parent?.postMessage({ type: "JOBGUARD_OPEN_SETTINGS" }, "*")
+            } catch {}
+          }}
+          className="w-full flex items-center justify-between p-3 rounded-xl bg-card border border-border hover:border-primary/60 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-sm text-foreground">
+            <Settings className="w-4 h-4 text-primary" />
+            Open settings
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Sheets · Resume · Application tracking
+          </span>
+        </button>
 
         {/* Source */}
         <a
