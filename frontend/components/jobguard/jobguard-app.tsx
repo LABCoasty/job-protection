@@ -71,10 +71,11 @@ export function JobGuardApp() {
       } else if (d.type === "AUTOFILL_COMPLETE") {
         const filled = d.filled ?? 0
         const missing = (d.missing ?? []).length
+        const platform = d.platform && d.platform !== "generic" ? ` on ${d.platform}` : ""
         setBanner(
-          `Filled ${filled} field${filled === 1 ? "" : "s"}${missing ? ` · ${missing} not found` : ""}`
+          `Filled ${filled} field${filled === 1 ? "" : "s"}${platform}${missing ? ` · ${missing} not found` : ""}`
         )
-        window.setTimeout(() => setBanner(null), 4000)
+        window.setTimeout(() => setBanner(null), 5000)
       } else if (d.type === "AUTOFILL_ERROR") {
         setBanner(d.error || "Auto-fill failed")
         window.setTimeout(() => setBanner(null), 6000)

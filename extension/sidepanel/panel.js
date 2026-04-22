@@ -193,6 +193,8 @@ async function runAutofill(requestId) {
       requestId,
       filled: res.filled || 0,
       missing: res.missing || [],
+      platform: res.platform || null,
+      filledFields: res.filledFields || [],
     });
   } catch (e) {
     post("AUTOFILL_ERROR", { requestId, error: String(e.message || e) });
