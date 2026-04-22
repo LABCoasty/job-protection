@@ -151,7 +151,7 @@ export function ResumeScreen({ onBack }: ResumeScreenProps) {
               className="gap-2"
             >
               <Upload className="w-4 h-4" />
-              Upload PDF / DOCX / TXT
+              Upload
             </Button>
             <input
               ref={fileRef}
