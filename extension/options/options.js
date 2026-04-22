@@ -19,6 +19,8 @@ const resumeTextarea = el("resume-text");
 const resumeInfo = el("resume-info");
 const btnSaveResume = el("btn-save-resume");
 const btnClearResume = el("btn-clear-resume");
+const toggleEmailAlias = el("toggle-email-alias");
+const toggleLogOnlyApplied = el("toggle-log-only-applied");
 const toast = el("toast");
 
 function showToast(text, { error = false } = {}) {
@@ -172,8 +174,33 @@ btnClearResume.addEventListener("click", async () => {
   showToast("Resume cleared");
 });
 
+async function loadTrackingPrefs() {
+  const { emailAliasEnabled, logOnlyAppliedEnabled } = await chrome.storage.sync.get([
+    "emailAliasEnabled",
+    "logOnlyAppliedEnabled",
+  ]);
+  toggleEmailAlias.checked = Boolean(emailAliasEnabled);
+  // Default "log only applied" to ON so we don't spam sheets with un-applied scans.
+  toggleLogOnlyApplied.checked = logOnlyAppliedEnabled === undefined ? true : Boolean(logOnlyAppliedEnabled);
+}
+
+toggleEmailAlias.addEventListener("change", async () => {
+  await chrome.storage.sync.set({ emailAliasEnabled: toggleEmailAlias.checked });
+  showToast(toggleEmailAlias.checked ? "Email alias on" : "Email alias off");
+});
+
+toggleLogOnlyApplied.addEventListener("change", async () => {
+  await chrome.storage.sync.set({ logOnlyAppliedEnabled: toggleLogOnlyApplied.checked });
+  showToast(
+    toggleLogOnlyApplied.checked
+      ? "Sheets log: only applied jobs"
+      : "Sheets log: every scan"
+  );
+});
+
 refreshStatus();
 loadBackend();
 loadFrontend();
 loadToken();
 loadResume();
+loadTrackingPrefs();

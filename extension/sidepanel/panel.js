@@ -111,12 +111,18 @@ async function runScan(requestId) {
     const scanId = data.scanId;
     const result = data.result;
 
+    // Only log on scan when the user explicitly disabled "log only applied".
+    // Default behavior: don't log yet — wait for the user to hit Applied.
     let loggedToSheet = false;
     try {
-      const status = await getStatus();
-      if (status.connected && status.autoLog && result) {
-        await appendScan(result);
-        loggedToSheet = true;
+      const { logOnlyAppliedEnabled } = await chrome.storage.sync.get(["logOnlyAppliedEnabled"]);
+      const onlyApplied = logOnlyAppliedEnabled === undefined ? true : Boolean(logOnlyAppliedEnabled);
+      if (!onlyApplied) {
+        const status = await getStatus();
+        if (status.connected && status.autoLog && result) {
+          await appendScan(result);
+          loggedToSheet = true;
+        }
       }
     } catch (e) {
       console.warn("JobGuard: Sheets log failed:", e);
@@ -195,6 +201,8 @@ async function runAutofill(requestId) {
       missing: res.missing || [],
       platform: res.platform || null,
       filledFields: res.filledFields || [],
+      emailAlias: res.emailAlias || null,
+      emailUsed: res.emailUsed || null,
     });
   } catch (e) {
     post("AUTOFILL_ERROR", { requestId, error: String(e.message || e) });
@@ -261,6 +269,21 @@ window.addEventListener("message", async (event) => {
           post("JOBGUARD_EXPORT_RESULT", { ok: true });
         } catch (e) {
           post("JOBGUARD_EXPORT_RESULT", { ok: false, error: String(e.message || e) });
+        }
+        break;
+      case "JOBGUARD_MARK_APPLIED":
+        try {
+          if (!data.result) throw new Error("No scan result to mark.");
+          // Attach applied-at + tracking info so the row in the sheet has it.
+          const enriched = {
+            ...data.result,
+            appliedAt: new Date().toISOString(),
+            emailAlias: data.emailAlias || null,
+          };
+          await appendScan(enriched);
+          post("JOBGUARD_APPLIED_RESULT", { ok: true, scanId: data.result.id });
+        } catch (e) {
+          post("JOBGUARD_APPLIED_RESULT", { ok: false, error: String(e.message || e) });
         }
         break;
       case "JOBGUARD_GET_RESUME":

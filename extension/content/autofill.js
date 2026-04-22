@@ -797,11 +797,24 @@
     return { filled, fields };
   }
 
-  async function autofillFromProfile(parsed) {
+  async function autofillFromProfile(parsed, options = {}) {
     if (!parsed) return { filled: 0, missing: ["no parsed resume"] };
     const values = buildFieldValues(parsed);
     const platform = platformSelectorsFromUrl();
     const isWorkday = platformName() === "Workday";
+
+    // Replace the plain email with a +company alias when the user opted in.
+    let appliedCompanySlug = null;
+    if (options.emailAliasEnabled) {
+      const slug = detectCompanySlug();
+      if (slug && values.email) {
+        const aliased = aliasEmail(values.email, slug);
+        if (aliased && aliased !== values.email) {
+          values.email = aliased;
+          appliedCompanySlug = slug;
+        }
+      }
+    }
 
     // Order matters: fill text inputs first, then try combobox dropdowns
     // (since Workday's state listbox depends on the country being set first).
@@ -909,7 +922,14 @@
       }
     }
 
-    return { filled, missing, filledFields, platform: platformName() };
+    return {
+      filled,
+      missing,
+      filledFields,
+      platform: platformName(),
+      emailAlias: appliedCompanySlug,  // null unless we aliased this time
+      emailUsed: values.email,
+    };
   }
 
   function platformName() {
@@ -926,11 +946,94 @@
     return "generic";
   }
 
+  // --------------------------------------------------------------------------
+  // Company detection for the +alias email trick
+  // --------------------------------------------------------------------------
+
+  function detectCompanySlug() {
+    const host = location.hostname.toLowerCase();
+    const path = location.pathname;
+
+    // Workday: acme.wd1.myworkdayjobs.com, acme.wd5.myworkdayjobs.com, etc.
+    let m = host.match(/^([a-z0-9-]+)\.wd\d+\.myworkdayjobs\.com$/);
+    if (m) return m[1];
+
+    // Greenhouse: boards.greenhouse.io/<company>/jobs/...
+    if (host.endsWith("greenhouse.io")) {
+      m = path.match(/^\/([^\/]+)/);
+      if (m) return m[1];
+    }
+
+    // Lever: jobs.lever.co/<company>/<id>
+    if (host.endsWith("lever.co")) {
+      m = path.match(/^\/([^\/]+)/);
+      if (m) return m[1];
+    }
+
+    // Ashby: jobs.ashbyhq.com/<company>/...
+    if (host.endsWith("ashbyhq.com")) {
+      m = path.match(/^\/([^\/]+)/);
+      if (m) return m[1];
+    }
+
+    // SmartRecruiters: jobs.smartrecruiters.com/<Company>/<id>
+    if (host.endsWith("smartrecruiters.com")) {
+      m = path.match(/^\/([^\/]+)/);
+      if (m) return m[1];
+    }
+
+    // BambooHR: <company>.bamboohr.com/jobs/...
+    m = host.match(/^([a-z0-9-]+)\.bamboohr\.com$/);
+    if (m) return m[1];
+
+    // iCIMS: careers-<company>.icims.com
+    m = host.match(/^(?:careers-)?([a-z0-9-]+)\.icims\.com$/);
+    if (m) return m[1];
+
+    // Workable: apply.workable.com/<company>/...
+    if (host.endsWith("workable.com")) {
+      m = path.match(/^\/([^\/]+)/);
+      if (m) return m[1];
+    }
+
+    // Generic fallback: take the SLD of the apex domain.
+    // e.g., "careers.acme.com" → "acme"
+    const parts = host.split(".").filter(Boolean);
+    if (parts.length >= 2) {
+      const sld = parts[parts.length - 2];
+      if (sld && sld.length > 1 && sld !== "www") return sld;
+    }
+    return null;
+  }
+
+  function slugify(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 30);
+  }
+
+  function aliasEmail(base, companySlug) {
+    if (!base || !base.includes("@") || !companySlug) return base;
+    const slug = slugify(companySlug);
+    if (!slug) return base;
+    const [local, domain] = base.split("@");
+    if (!local || !domain) return base;
+    // If the user already typed a +tag into their email, replace it rather
+    // than stacking (gmail ignores everything after the first +, but we want
+    // clean tracking).
+    const trunk = local.split("+")[0];
+    return `${trunk}+${slug}@${domain}`;
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.action !== "AUTOFILL_FORM") return;
     (async () => {
       try {
-        const { resumeParsed } = await chrome.storage.local.get(["resumeParsed"]);
+        const [{ resumeParsed }, { emailAliasEnabled }] = await Promise.all([
+          chrome.storage.local.get(["resumeParsed"]),
+          chrome.storage.sync.get(["emailAliasEnabled"]),
+        ]);
         if (!resumeParsed) {
           sendResponse({
             ok: false,
@@ -938,7 +1041,9 @@
           });
           return;
         }
-        const result = await autofillFromProfile(resumeParsed);
+        const result = await autofillFromProfile(resumeParsed, {
+          emailAliasEnabled: Boolean(emailAliasEnabled),
+        });
         sendResponse({ ok: true, ...result });
       } catch (e) {
         sendResponse({ ok: false, error: String(e.message || e) });

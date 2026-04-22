@@ -131,6 +131,33 @@
     </div>
 
     <div class="section">
+      <h2>Application tracking</h2>
+      <p class="muted" style="margin: 0 0 12px 0;">Control what JobGuard sends where.</p>
+
+      <div class="row">
+        <div>
+          <div>Use + alias per company</div>
+          <div class="muted">Auto-fill sends <code>yourname+companyname@gmail.com</code> so you can see which employer is leaking your address. Gmail/Outlook/FastMail deliver it all to your real inbox.</div>
+        </div>
+        <label class="switch">
+          <input id="toggle-email-alias" type="checkbox">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div>Only log jobs you applied to</div>
+          <div class="muted">Google Sheets append happens when you mark a scan as Applied. Turn off to log every scan automatically.</div>
+        </div>
+        <label class="switch">
+          <input id="toggle-log-only-applied" type="checkbox">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
       <h2>Your resume</h2>
       <p class="muted" style="margin: 0 0 12px 0;">Upload a plain-text resume or paste its contents. JobGuard sends it with every scan so the AI can tell you how well the job matches your background.</p>
       <div class="row" style="align-items: flex-start;">

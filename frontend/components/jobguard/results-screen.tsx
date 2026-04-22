@@ -24,6 +24,7 @@ import {
   Search,
   Shield,
   Check,
+  Send,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,6 +36,8 @@ interface ResultsScreenProps {
   result: ScanResult
   onExport: () => void
   onBack: () => void
+  onMarkApplied?: () => void
+  appliedState?: "idle" | "pending" | "done"
 }
 
 function getScoreColor(score: number): string {
@@ -95,7 +98,13 @@ function cleanUnknown(value: string | undefined | null): string {
   return v
 }
 
-export function ResultsScreen({ result, onExport, onBack }: ResultsScreenProps) {
+export function ResultsScreen({
+  result,
+  onExport,
+  onBack,
+  onMarkApplied,
+  appliedState = "idle",
+}: ResultsScreenProps) {
   const { trustScore, riskLevel, primaryWarning, snapshot, jobPostSignals, companySignals, resumeMatch } = result
   const displayTitle = cleanUnknown(snapshot.jobTitle) || "Untitled listing"
   const displayCompany = cleanUnknown(snapshot.companyName) || "Unnamed company"
@@ -400,15 +409,37 @@ export function ResultsScreen({ result, onExport, onBack }: ResultsScreenProps) 
 
       {/* Fixed Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border px-4 py-3">
-        <div className="max-w-md mx-auto grid grid-cols-2 gap-2">
-          <Button variant="outline" size="sm" onClick={copyToClipboard} className="gap-2">
-            {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-            {copied ? "Copied" : "Copy JSON"}
-          </Button>
-          <Button size="sm" onClick={onExport} className="gap-2">
-            <FileSpreadsheet className="w-4 h-4" />
-            Export
-          </Button>
+        <div className="max-w-md mx-auto space-y-2">
+          {onMarkApplied && (
+            <Button
+              size="sm"
+              onClick={onMarkApplied}
+              disabled={appliedState !== "idle"}
+              className="w-full gap-2"
+            >
+              {appliedState === "done" ? (
+                <>
+                  <Check className="w-4 h-4" /> Logged to sheet
+                </>
+              ) : appliedState === "pending" ? (
+                "Logging…"
+              ) : (
+                <>
+                  <Send className="w-4 h-4" /> Mark as applied
+                </>
+              )}
+            </Button>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="sm" onClick={copyToClipboard} className="gap-2">
+              {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+              {copied ? "Copied" : "Copy JSON"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onExport} className="gap-2">
+              <FileSpreadsheet className="w-4 h-4" />
+              Export
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -27,6 +27,8 @@ export function JobGuardApp() {
   const [scanError, setScanError] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [lastEmailAlias, setLastEmailAlias] = useState<string | null>(null)
+  const [appliedState, setAppliedState] = useState<"idle" | "pending" | "done">("idle")
 
   const inExtensionFrame = typeof window !== "undefined" && window.parent !== window
 
@@ -72,10 +74,22 @@ export function JobGuardApp() {
         const filled = d.filled ?? 0
         const missing = (d.missing ?? []).length
         const platform = d.platform && d.platform !== "generic" ? ` on ${d.platform}` : ""
+        const aliasNote = d.emailUsed && d.emailAlias ? ` · alias: ${d.emailUsed}` : ""
         setBanner(
-          `Filled ${filled} field${filled === 1 ? "" : "s"}${platform}${missing ? ` · ${missing} not found` : ""}`
+          `Filled ${filled} field${filled === 1 ? "" : "s"}${platform}${missing ? ` · ${missing} not found` : ""}${aliasNote}`
         )
-        window.setTimeout(() => setBanner(null), 5000)
+        setLastEmailAlias(d.emailUsed || null)
+        window.setTimeout(() => setBanner(null), 6000)
+      } else if (d.type === "JOBGUARD_APPLIED_RESULT") {
+        if (d.ok) {
+          setAppliedState("done")
+          setBanner("Logged this application to Google Sheets.")
+          window.setTimeout(() => setBanner(null), 4000)
+        } else {
+          setAppliedState("idle")
+          setBanner(d.error || "Could not log this application.")
+          window.setTimeout(() => setBanner(null), 6000)
+        }
       } else if (d.type === "AUTOFILL_ERROR") {
         setBanner(d.error || "Auto-fill failed")
         window.setTimeout(() => setBanner(null), 6000)
@@ -206,6 +220,28 @@ export function JobGuardApp() {
     setCurrentScreen("export")
   }, [])
 
+  const handleMarkApplied = useCallback(() => {
+    if (!currentResult) return
+    setAppliedState("pending")
+    try {
+      window.parent?.postMessage(
+        {
+          type: "JOBGUARD_MARK_APPLIED",
+          result: currentResult,
+          emailAlias: lastEmailAlias,
+        },
+        "*"
+      )
+    } catch {
+      setAppliedState("idle")
+    }
+  }, [currentResult, lastEmailAlias])
+
+  // Reset the applied chip when the user navigates to a different scan.
+  useEffect(() => {
+    setAppliedState("idle")
+  }, [currentResult?.id])
+
   const handleSelectScan = useCallback((id: string) => {
     getScan(id)
       .then((result) => {
@@ -292,7 +328,13 @@ export function JobGuardApp() {
         )}
         
         {currentScreen === "results" && currentResult && (
-          <ResultsScreen result={currentResult} onExport={handleExport} onBack={handleBack} />
+          <ResultsScreen
+            result={currentResult}
+            onExport={handleExport}
+            onBack={handleBack}
+            onMarkApplied={inExtensionFrame ? handleMarkApplied : undefined}
+            appliedState={appliedState}
+          />
         )}
         
         {currentScreen === "history" && (

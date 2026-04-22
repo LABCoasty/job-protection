@@ -11,6 +11,7 @@ const HEADER_ROW = [
   "Risk Level",
   "Primary Warning",
   "Applied At",
+  "Email Alias",
   "Notes",
 ];
 
@@ -135,11 +136,12 @@ export async function appendScan(result) {
     result.trustScore ?? "",
     result.riskLevel || "",
     result.primaryWarning || "",
-    "",
+    result.appliedAt || "",
+    result.emailAlias || "",
     "",
   ];
   await authedFetch(
-    `${SHEETS_API}/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A:J:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `${SHEETS_API}/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A:K:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: [row] }) }
   );
 }
