@@ -12,37 +12,71 @@
     return null;
   }
 
-  function detailPane() {
-    // Primary strategy: find THE specific selected-job card (top-card). Its
-    // ancestor container is the right-hand detail pane on /jobs/search and
-    // /jobs/collections pages, or the whole main on /jobs/view/*. Anchoring
-    // on the top-card guarantees we never mix in the left-hand job list.
-    const topCard =
-      document.querySelector(".job-details-jobs-unified-top-card") ||
-      document.querySelector(".jobs-unified-top-card") ||
-      document.querySelector(".jobs-details-top-card") ||
-      document.querySelector(".top-card-layout");
-    if (topCard) {
-      const container =
-        topCard.closest(
-          ".jobs-details, .jobs-details__main-content, .job-view-layout, " +
-          ".jobs-search__job-details, .jobs-search__job-details--wrapper, " +
-          ".jobs-search__job-details--container, .jobs-search-two-pane__detail-view, " +
-          ".scaffold-layout__detail"
-        ) || topCard.parentElement;
-      if (container) return container;
+  // Known containers for the RIGHT-hand detail pane, in preference order.
+  // We pick the first one that is visible AND contains a top-card element —
+  // that way we never accidentally return a container that only holds the
+  // left-hand job LIST (which also has its own ancestors on search pages).
+  const DETAIL_PANE_SELECTORS = [
+    ".jobs-search__job-details--wrapper",
+    ".jobs-search__job-details--container",
+    ".jobs-search-two-pane__detail-view",
+    ".jobs-search__job-details",
+    ".scaffold-layout__detail",
+    ".jobs-details__main-content",
+    ".job-view-layout",
+    ".jobs-details",
+  ];
+
+  const TOP_CARD_SELECTORS = [
+    ".job-details-jobs-unified-top-card",
+    ".jobs-unified-top-card",
+    ".jobs-details-top-card",
+    ".top-card-layout",
+  ];
+
+  function isVisible(el) {
+    if (!el) return false;
+    if (!el.offsetParent && el !== document.body) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function containsTopCard(root) {
+    if (!root) return false;
+    for (const sel of TOP_CARD_SELECTORS) {
+      const card = root.querySelector(sel);
+      if (card && isVisible(card)) return true;
     }
-    // Fallback: known layouts without a top-card (loading state, different tenant).
-    return (
-      document.querySelector(".jobs-details__main-content") ||
-      document.querySelector(".job-view-layout") ||
-      document.querySelector(".jobs-search__job-details--wrapper") ||
-      document.querySelector(".jobs-search__job-details--container") ||
-      document.querySelector(".jobs-search__job-details") ||
-      document.querySelector(".jobs-search-two-pane__detail-view") ||
-      document.querySelector(".scaffold-layout__detail") ||
-      null
-    );
+    return false;
+  }
+
+  function detailPane() {
+    // Strategy 1: walk the preference list and return the first visible
+    // container that actually HAS a rendered top-card inside.
+    for (const sel of DETAIL_PANE_SELECTORS) {
+      const candidates = Array.from(document.querySelectorAll(sel));
+      for (const c of candidates) {
+        if (isVisible(c) && containsTopCard(c)) return c;
+      }
+    }
+
+    // Strategy 2: anchor on a visible top-card and walk up to its nearest
+    // known detail-pane ancestor.
+    for (const sel of TOP_CARD_SELECTORS) {
+      const card = document.querySelector(sel);
+      if (card && isVisible(card)) {
+        const container =
+          card.closest(DETAIL_PANE_SELECTORS.join(", ")) || card.parentElement;
+        if (container) return container;
+      }
+    }
+
+    // Last resort: a known layout without a top-card (loading state).
+    for (const sel of DETAIL_PANE_SELECTORS) {
+      const c = document.querySelector(sel);
+      if (c && isVisible(c)) return c;
+    }
+    return null;
   }
 
   function mainArea() {
@@ -190,6 +224,17 @@
     if (msg.action !== "EXTRACT_AND_SCAN") return;
     try {
       const payload = extractLinkedIn();
+      // Console breadcrumb so we can diagnose mis-extraction without mining
+      // the DOM live. Shows up in the LinkedIn tab's DevTools console.
+      try {
+        console.log("[JobGuard] extracted", {
+          jobTitle: payload.jobTitle,
+          companyName: payload.companyName,
+          descriptionPreview: (payload.description || "").slice(0, 140),
+          descriptionLength: payload.descriptionLength,
+          url: payload.pageUrl,
+        });
+      } catch {}
       sendResponse({ payload });
     } catch (e) {
       sendResponse({ error: String(e.message || e) });
