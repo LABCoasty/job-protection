@@ -165,15 +165,28 @@ def scan(body: ScanRequest):
         resume=body.resumeText or "",
     )
     if analysis:
-        # Prefer LLM-extracted fields if they look better than what we had.
-        if analysis.get("extractedJobTitle") and (_looks_unknown(snapshot.jobTitle) or not snapshot.jobTitle):
-            snapshot = snapshot.model_copy(update={"jobTitle": analysis["extractedJobTitle"]})
-        if analysis.get("extractedCompanyName") and (_looks_unknown(snapshot.companyName) or not snapshot.companyName):
-            snapshot = snapshot.model_copy(update={"companyName": analysis["extractedCompanyName"]})
-        if analysis.get("extractedLocation") and not snapshot.location:
-            snapshot = snapshot.model_copy(update={"location": analysis["extractedLocation"]})
-        if analysis.get("extractedEmploymentType") and not snapshot.employmentType:
-            snapshot = snapshot.model_copy(update={"employmentType": analysis["extractedEmploymentType"]})
+        # Trust the LLM's extraction over the scraper's value — the LLM read
+        # the full description from the selected detail pane, while the scraper
+        # can pick up page titles / section headers / left-hand list items.
+        ext_title = analysis.get("extractedJobTitle") or ""
+        ext_company = analysis.get("extractedCompanyName") or ""
+        ext_location = analysis.get("extractedLocation") or ""
+        ext_employment = analysis.get("extractedEmploymentType") or ""
+        updates: dict = {}
+        if ext_title and ext_title.strip().lower() not in ("unknown", "unknown title"):
+            updates["jobTitle"] = ext_title
+        elif _looks_unknown(snapshot.jobTitle):
+            updates["jobTitle"] = "Unknown title"
+        if ext_company and ext_company.strip().lower() not in ("unknown", "unknown company"):
+            updates["companyName"] = ext_company
+        elif _looks_unknown(snapshot.companyName):
+            updates["companyName"] = "Unknown company"
+        if ext_location and not snapshot.location:
+            updates["location"] = ext_location
+        if ext_employment and not snapshot.employmentType:
+            updates["employmentType"] = ext_employment
+        if updates:
+            snapshot = snapshot.model_copy(update=updates)
         resume_match = analysis.get("resumeMatch")
         result = ScanResult(
             id=scan_id,

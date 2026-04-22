@@ -13,14 +13,33 @@
   }
 
   function detailPane() {
-    // On /jobs/collections/... and /jobs/search/... the detail is in a right pane.
-    // On /jobs/view/<id> the whole page is the detail. Try specific → generic.
+    // Primary strategy: find THE specific selected-job card (top-card). Its
+    // ancestor container is the right-hand detail pane on /jobs/search and
+    // /jobs/collections pages, or the whole main on /jobs/view/*. Anchoring
+    // on the top-card guarantees we never mix in the left-hand job list.
+    const topCard =
+      document.querySelector(".job-details-jobs-unified-top-card") ||
+      document.querySelector(".jobs-unified-top-card") ||
+      document.querySelector(".jobs-details-top-card") ||
+      document.querySelector(".top-card-layout");
+    if (topCard) {
+      const container =
+        topCard.closest(
+          ".jobs-details, .jobs-details__main-content, .job-view-layout, " +
+          ".jobs-search__job-details, .jobs-search__job-details--wrapper, " +
+          ".jobs-search__job-details--container, .jobs-search-two-pane__detail-view, " +
+          ".scaffold-layout__detail"
+        ) || topCard.parentElement;
+      if (container) return container;
+    }
+    // Fallback: known layouts without a top-card (loading state, different tenant).
     return (
       document.querySelector(".jobs-details__main-content") ||
       document.querySelector(".job-view-layout") ||
       document.querySelector(".jobs-search__job-details--wrapper") ||
       document.querySelector(".jobs-search__job-details--container") ||
       document.querySelector(".jobs-search__job-details") ||
+      document.querySelector(".jobs-search-two-pane__detail-view") ||
       document.querySelector(".scaffold-layout__detail") ||
       null
     );
@@ -39,8 +58,10 @@
 
   function extractLinkedIn() {
     const main = mainArea();
-    // Title: prefer matches inside the detail pane so we don't pick up
-    // section headers like "Top job picks for you".
+    // Title: STRICTLY within the detail pane. Never fall back to document.title
+    // or a document-wide h1 — on /jobs/search and /jobs/collections the page
+    // title is the search query (e.g. "software engineer internship jobs"),
+    // not the selected listing.
     const titleSelectors = [
       ".job-details-jobs-unified-top-card__job-title h1",
       ".job-details-jobs-unified-top-card__job-title",
@@ -50,21 +71,23 @@
       "[data-tracking-control-name='jobs_show_poster_modal_job_title']",
       ".job-details-jobs-unified-top-card h1",
       "h1.t-24",
+      "h1.t-bold",
       "h1",
     ];
-    const titleEl = firstMatch(titleSelectors, main) || firstMatch(titleSelectors);
+    const titleEl = firstMatch(titleSelectors, main);
     const jobTitleRaw = getText(titleEl);
-    // Strip LinkedIn's "(N) " unread prefix and " | LinkedIn" suffix, then reject
-    // known navigation headers so we don't send "Top job picks for you" as a job title.
-    const docTitleClean = (document.title || "")
-      .replace(/^\(\d+\)\s*/, "")
-      .replace(/\s+[|·]\s+LinkedIn.*$/i, "")
-      .trim();
-    const sectionHeaderRe = /^(top job picks|recommended for you|saved jobs|applied jobs|my jobs|jobs home|job search|jobs)\b/i;
-    const candidates = [jobTitleRaw, docTitleClean].filter(
-      (t) => t && !sectionHeaderRe.test(t)
-    );
-    const jobTitle = candidates[0] || "";
+    // Reject titles that clearly look like search / navigation headers.
+    const sectionHeaderRe =
+      /^(top job picks|recommended for you|saved jobs|applied jobs|my jobs|jobs home|job search|jobs)\b/i;
+    // Reject titles that look like a search query (multiple lowercase words
+    // followed by "jobs" / "internships" / "roles").
+    const searchQueryRe = /\b(jobs|internships?|roles?|positions?|careers?)\s*$/i;
+    const jobTitle =
+      jobTitleRaw &&
+      !sectionHeaderRe.test(jobTitleRaw) &&
+      !searchQueryRe.test(jobTitleRaw.toLowerCase().trim())
+        ? jobTitleRaw
+        : "";
 
     // Company: scope to detail pane first so we don't grab a company from the list card.
     const companySelectors = [
@@ -76,7 +99,9 @@
       ".jobs-details-top-card__company-url",
       "a[href*='/company/']",
     ];
-    let companyEl = firstMatch(companySelectors, main) || firstMatch(companySelectors);
+    // STRICTLY scope to detail pane — never look document-wide, which would
+    // pick up the first "/company/…" link from the left-hand job list.
+    let companyEl = firstMatch(companySelectors, main);
     if (!companyEl && main) {
       companyEl = main.querySelector("a[href*='/company/']");
     }

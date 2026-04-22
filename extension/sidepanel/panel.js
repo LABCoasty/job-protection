@@ -178,6 +178,42 @@ async function parseResumeOnBackend(text) {
 
 // --- Auto-fill ------------------------------------------------------------
 
+async function ensureAutofillInjected(tabId) {
+  // Injects content/autofill.js into the active tab on demand. Useful when:
+  //  - the user loaded the ATS page before the extension was reloaded
+  //    (stale or missing content script), or
+  //  - the page URL doesn't match any of our manifest content_scripts
+  //    matches but is still within our host_permissions.
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content/autofill.js"],
+    });
+    return true;
+  } catch (e) {
+    console.warn("JobGuard: on-demand autofill injection failed:", e);
+    return false;
+  }
+}
+
+async function sendAutofillMessage(tabId) {
+  // Wraps chrome.tabs.sendMessage so both thrown errors AND
+  // chrome.runtime.lastError surfaces consistently.
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { action: "AUTOFILL_FORM" }, (res) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, __channel: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(res || { ok: false, __channel: "empty response" });
+      });
+    } catch (e) {
+      resolve({ ok: false, __channel: String(e?.message || e) });
+    }
+  });
+}
+
 async function runAutofill(requestId) {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -186,15 +222,27 @@ async function runAutofill(requestId) {
     if (!resumeParsed) {
       throw new Error("No parsed resume yet. Open the Resume tab and click Parse first.");
     }
-    const res = await chrome.tabs.sendMessage(tab.id, { action: "AUTOFILL_FORM" }).catch((e) => ({
-      ok: false,
-      error:
-        "Auto-fill isn't available on this page. Open an apply form on LinkedIn, Greenhouse, Lever, Workday, Workable, Ashby, SmartRecruiters, BambooHR, iCIMS, or Taleo.",
-      detail: e?.message,
-    }));
-    if (!res?.ok) {
-      throw new Error(res?.error || "Auto-fill failed.");
+
+    // 1st try: content script may already be injected from the manifest match.
+    let res = await sendAutofillMessage(tab.id);
+
+    // 2nd try: if the content script wasn't there (extension reloaded, URL
+    // pattern missed the match), inject it on demand and retry.
+    if (!res?.ok && res?.__channel) {
+      const injected = await ensureAutofillInjected(tab.id);
+      if (injected) {
+        res = await sendAutofillMessage(tab.id);
+      }
     }
+
+    if (!res?.ok) {
+      const detail = res?.__channel ? ` (${res.__channel})` : "";
+      throw new Error(
+        res?.error ||
+          `Auto-fill couldn't run on this page${detail}. Make sure you're on a job application form on a supported ATS (LinkedIn, Workday, Greenhouse, Lever, Workable, Ashby, SmartRecruiters, BambooHR, iCIMS, Taleo).`
+      );
+    }
+
     post("AUTOFILL_COMPLETE", {
       requestId,
       filled: res.filled || 0,

@@ -64,8 +64,10 @@ Job listing metadata:
 - Recruiter: {snapshot.get('recruiterVisible') or 'none'}
 - Description length: {snapshot.get('descriptionLength', 0)} chars
 
-Job description (excerpt):
-{description[:4000] if description else 'No description provided.'}
+Job description (from the selected detail pane — read ALL of it; the real
+job title and company name live in here, the metadata fields above may be
+stale scraper output):
+{description[:14000] if description else 'No description provided.'}
 
 External company investigation (labeled sections):
 {search_evidence[:6000] if search_evidence else 'No external evidence.'}
